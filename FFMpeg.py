@@ -37,7 +37,15 @@ def parse_output(outs, errs='', returncode=None):
 			if lastframeline: error(lastframeline) #
 			raise FFMpegException(line)
 		elif 'Press [q] to stop, [?] for help' in line:
-			error('Running interactive (maybe try -nostdin)')
+			error('Running interactive (maybe try -nostdin if using ffmpeg later than the avconv fork)')
+		elif 'Non-increasing DTS' in line:
+			warning(line)
+		elif 'Invalid timestamp' in line:
+			warning(line)
+		elif 'DTS discontinuity' in line:
+			warning(line)
+		elif 'VBV buffer size not set, muxing may fail' in line:
+			warning(line)
 		elif 'deprecated pixel format used, make sure you did set range correctly' in line:
 			warning(line)
 		elif line.startswith('frame='):
