@@ -58,3 +58,10 @@ target/
 
 # Vim
 *.swp
+
+# OSX
+.DS_Store
+
+### custom
+samples
+

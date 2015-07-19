@@ -13,3 +13,10 @@ Uses a combination of the following FFMpeg commands:
 [ '-frames:v', '1' ]
 [ '-vsync', '0' ]
 [ '-vsync', 'vfr' ]
+
+ffmpeg -i input.flv -vf fps=1 out%d.png
+ffmpeg -i myvideo.avi -vf fps=1/60 img%03d.jpg
+ffmpeg -i test.flv -vf fps=1/600 thumb%04d.bmp
+ffmpeg -i input.flv -vf "select='eq(pict_type,PICT_TYPE_I)'" -vsync vfr thumb%04d.png
+
+ffmpeg -i video.avi -vf select='gt(scene\,0.4)',scale=160:120,tile -frames:v 1 preview.png
