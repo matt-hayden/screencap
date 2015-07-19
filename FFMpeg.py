@@ -26,10 +26,17 @@ debug("ffmpeg is "+ffmpeg_executable)
 debug("ffprobe is "+ffprobe_executable)
 
 def parse_output(outs, errs='', returncode=None):
-	def _parse(b, prefix='STDOUT', encoding='ASCII'):
+	warnings = [ 'deprecated pixel format used, make sure you did set range correctly',
+				 'DTS discontinuity',
+				 'Invalid timestamp',
+				 'Non-increasing DTS',
+				 'VBV buffer size not set, muxing may fail' ]
+	def _parse(b, prefix='STDOUT', warnings=warnings, encoding='ASCII'):
 		lastframeline = ''
 		line = b.decode(encoding).rstrip()
-		if 'At least one output file must be specified' in line:
+		if 'Unrecognized option' in line:
+			raise FFMpegException(line)
+		elif 'At least one output file must be specified' in line:
 			raise FFMpegException(line)
 		elif 'Error opening filters!' in line:
 			raise FFMpegException(line)
@@ -38,20 +45,15 @@ def parse_output(outs, errs='', returncode=None):
 			raise FFMpegException(line)
 		elif 'Press [q] to stop, [?] for help' in line:
 			error('Running interactive (maybe try -nostdin if using ffmpeg later than the avconv fork)')
-		elif 'Non-increasing DTS' in line:
-			warning(line)
-		elif 'Invalid timestamp' in line:
-			warning(line)
-		elif 'DTS discontinuity' in line:
-			warning(line)
-		elif 'VBV buffer size not set, muxing may fail' in line:
-			warning(line)
-		elif 'deprecated pixel format used, make sure you did set range correctly' in line:
-			warning(line)
-		elif line.startswith('frame='):
+		elif line.startswith('frame='): # progress
 			lastframeline = line
 		else:
-			debug(prefix+' '+line)
+			for w in warnings:
+				if w in line:
+					warning(line)
+					break
+			else:
+				debug(prefix+' '+line)
 		return(lastframeline) # progress bar
 	if errs:
 		for b in errs.splitlines():
