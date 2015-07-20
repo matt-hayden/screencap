@@ -14,6 +14,9 @@ def montage(input_files, options=[], output_filename=None, **kwargs):
 		else:
 			options += [ '-'+k, str(v) ]
 	returncode = subprocess.check_call(['montage.im6']+input_files+options+[output_filename])
+	'''Example errors:
+	montage.im6: unable to open image `...': File name too long @ error/blob.c/OpenBlob/2638.
+	'''
 	assert not returncode
 	return output_filename
 
