@@ -3,11 +3,7 @@ import subprocess
 import sys
 import time
 
-#from . import *
-def debug(*args, **kwargs):
-	pass
-info=debug
-warning=error=critical=print
+from . import *
 
 class FFMpegException(Exception):
 	pass
@@ -93,8 +89,12 @@ def thumbnail_mosaic(input_file, output_file=None, **kwargs):
 		raise FFMpegException()
 	return output_file
 
-def thumbnails(input_file, output_file_pattern=None, **kwargs):
+def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:-1'], **kwargs):
 	"""Still captures from each I-frame into a series of files
+
+	input_file
+	output_file_pattern:	%08d in this string is replaced with order number
+	options:	['-vf', 'scale=160:-1'] resizes images
 	"""
 	if 'timeout' not in kwargs:
 		kwargs['timeout'] = os.path.getsize(input_file) / 5E6
@@ -103,10 +103,12 @@ def thumbnails(input_file, output_file_pattern=None, **kwargs):
 	output_dir, _ = os.path.split(output_file_pattern)
 	st = time.time()
 	#ffmpeg(['-nostdin', '-an', '-i', input_file, '-vf', "select='eq(pict_type,PICT_TYPE_I)'", '-vsync', '0', output_file_pattern], **kwargs)
-	ffmpeg(['-nostdin', '-skip_frame', 'nokey', '-an', '-i', input_file, '-vf', 'scale=160:-1', '-vsync', '0', output_file_pattern], **kwargs)
+	ffmpeg(['-nostdin', '-skip_frame', 'nokey', '-an', '-i', input_file]+options+['-vsync', '0', output_file_pattern], **kwargs)
+	dur = time.time() - st
 	output_files = (os.path.join(output_dir, f) for f in os.listdir(output_dir))
 	new_files = sorted(f for f in output_files if st < os.path.getmtime(f))
 	n = len(new_files)
+	info("Wrote {:d} images in {:.0f} s, averaging {:.1f}".format(n, dur, (dur/n) if n else dur))
 	if (output_file_pattern % 1) in new_files and (output_file_pattern % n) in new_files:
 		return (output_file_pattern % x for x in range(1, n+1))
 	else:

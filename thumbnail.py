@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 import os, os.path
 import tempfile
+import time
 
-from FFMpeg import *
-from ImageMagick import montage
+from . import *
+
+debug("Loading modules")
+from .FFMpeg import thumbnails
+from .ImageMagick import montage
 
 def thumbnail(input_filename, output_filename=None, count=56, overwrite=True, **kwargs):
 	"""Screencap generator for video files.
@@ -21,6 +25,7 @@ def thumbnail(input_filename, output_filename=None, count=56, overwrite=True, **
 	if not output_filename:
 		output_filename = os.path.join(dirname, "{}-{}-screens.JPG".format(filepart, size))
 	if not overwrite and os.path.exists(output_filename):
+		warning("Refusing to overwrite '{}'".format(output_filename))
 		return None
 	title = "{} - {:,} B".format(basename, size)
 	with tempfile.TemporaryDirectory() as td:
@@ -36,15 +41,18 @@ def thumbnail(input_filename, output_filename=None, count=56, overwrite=True, **
 
 def is_video_file(fp):
 	_, ext = os.path.splitext(fp)
-	if ext.upper() in [ '.AVI', '.DIVX', '.FLV', '.MPG', '.MPEG', '.MP4', '.MKV', '.MOV', '.WEBM' ]:
+	u = ext.upper()
+	if u in [ '.AVI', '.DIVX', '.FLV', '.MPG', '.MPEG', '.MP4', '.MKV', '.MOV', '.WEBM' ]:
 		return True
-	elif ext.upper() in [ '.ASF', '.WMV' ]:
+	elif u in [ '.ASF', '.WMV' ]:
 		return True
+	elif u in [ '.JPG', '.JPEG', '.PNG' ]:
+		return False
 	elif 8E6 < os.path.getsize(fp):
-		print("Ignoring", fp)
+		warning("Ignoring '{}'".format(fp))
 	return False
 #
-def recurse(args, successes=[], failures=[], video_detector=is_video_file, **kwargs):
+def recurse(args, video_detector=is_video_file, successes=[], **kwargs):
 	"""Walk through directories generating thumbnails along the way.
 
 	args:	iterable of paths
@@ -53,29 +61,19 @@ def recurse(args, successes=[], failures=[], video_detector=is_video_file, **kwa
 	Other arguments passed to the thumbnail() method:
 	overwrite:	by default, existing thumbnails are NOT overwritten
 	"""
+	st, nfiles = time.time(), 0
 	for arg in args:
 		for root, dirs, files in os.walk(arg):
 			for fn in files:
 				fp = os.path.join(root, fn)
 				if video_detector(fp):
 					try:
-						thumbnail(fp, overwrite=False, **kwargs)
-						successes.append(fp)
-					except:
-						failures.append(fp)
-				else:
-					print("Ignoring", fp)
-	return successes, failures
-#
-if __name__ == '__main__':
-	import sys
-	myoptions = { 'tile': '8x', 'geometry': '+0+0', 'border': '1', 'quality': '35' }
-	successes, failures = recurse(sys.argv[1:], **myoptions)
-	if successes:
-		with open('successes.list', 'w') as fo:
-			fo.write('\n'.join(successes))
-			fo.write('\n')
-	if failures:
-		with open('failures.list', 'w') as fo:
-			fo.write('\n'.join(failures)+'\n')
-			fo.write('\n')
+						successes.append((fp, thumbnail(fp, overwrite=False, **kwargs) ))
+					except Exception as e:
+						error("'{}' failed: {}".format(fp, e))
+					nfiles += 1
+				#else:
+				#	warning("Ignoring '{}'".format(fp))
+	dur = time.time() - st
+	info("Processed {:d} files in {:.0f} s, averaging {:.1f}".format(nfiles, dur, (dur/nfiles) if nfiles else dur))
+	return successes

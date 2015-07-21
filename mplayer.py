@@ -1,8 +1,7 @@
 import subprocess
 import sys
 
-#from . import *
-debug=print
+from . import *
 
 def check_version(executables=['mplayer']):
 	for e in executables:

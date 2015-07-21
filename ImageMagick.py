@@ -1,7 +1,24 @@
 import os, os.path
 import subprocess
 
-def montage(input_files, options=[], output_filename=None, **kwargs):
+from . import *
+
+montage_executable = 'montage.im6'
+
+class ImageMagickException(Exception):
+	pass
+def montage(input_files, output_filename=None, options=[], **kwargs):
+	class MontageException(ImageMagickException):
+		pass
+	def _parse(b, prefix='STDOUT', encoding='ASCII', **kwargs):
+		'''Example errors:
+		montage.im6: unable to open image `...': File name too long @ error/blob.c/OpenBlob/2638.
+		'''
+		line = b.decode(encoding).rstrip()
+		if 'unable to open image' in line:
+			raise MontageException(line)
+		else:
+			debug(line)
 	if not output_filename:
 		f, x = os.path.splitext(input_files[0])
 		output_filename = f+'_montage'+x
@@ -13,10 +30,14 @@ def montage(input_files, options=[], output_filename=None, **kwargs):
 			options.remove('-'+k)
 		else:
 			options += [ '-'+k, str(v) ]
-	returncode = subprocess.check_call(['montage.im6']+input_files+options+[output_filename])
-	'''Example errors:
-	montage.im6: unable to open image `...': File name too long @ error/blob.c/OpenBlob/2638.
-	'''
-	assert not returncode
+	proc = subprocess.Popen([montage_executable]+input_files+options+[output_filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	outs, _ = proc.communicate()
+	rc = proc.returncode
+	for b in outs.splitlines():
+		_parse(b, prefix='')
+	if not rc:
+		debug("montage exited successfully")
+	else:
+		raise MontageException("montage exited {}".format(rc))
 	return output_filename
 

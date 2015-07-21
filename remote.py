@@ -1,7 +1,7 @@
 
 import requests
 
-from . import debug, info, warning, error, critical
+from . import debug, info, warning, error, panic
 
 def myindex(url):
 	r = requests.get(url)
