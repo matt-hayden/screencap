@@ -10,5 +10,8 @@ else:
 	logging.basicConfig(level=logging.DEBUG)
 debug, info, warning, error, panic = logger.debug, logger.info, logger.warning, logger.error, logger.critical
 
+# constants:
+filename_encoding = stream_encoding = 'UTF-8'
+
 from .thumbnail import thumbnail, recurse
-__all__ = 'debug warning info error panic thumbnail recurse'.split()
+__all__ = 'debug warning info error panic filename_encoding stream_encoding thumbnail recurse'.split()

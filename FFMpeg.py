@@ -31,7 +31,7 @@ def parse_output(outs, errs='', returncode=None):
 				 'Invalid timestamp',
 				 'Non-increasing DTS',
 				 'VBV buffer size not set, muxing may fail' ]
-	def _parse(b, prefix='STDOUT', warnings=warnings, encoding='ASCII'):
+	def _parse(b, prefix='STDOUT', warnings=warnings, encoding=stream_encoding):
 		lastframeline = ''
 		line = b.decode(encoding).rstrip()
 		if 'Unrecognized option' in line:

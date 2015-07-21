@@ -61,6 +61,8 @@ def recurse(args, video_detector=is_video_file, successes=[], **kwargs):
 	Other arguments passed to the thumbnail() method:
 	overwrite:	by default, existing thumbnails are NOT overwritten
 	"""
+	if not 'overwrite' in kwargs:
+		kwargs['overwrite'] = False
 	st, nfiles = time.time(), 0
 	for arg in args:
 		for root, dirs, files in os.walk(arg):
@@ -68,7 +70,7 @@ def recurse(args, video_detector=is_video_file, successes=[], **kwargs):
 				fp = os.path.join(root, fn)
 				if video_detector(fp):
 					try:
-						successes.append((fp, thumbnail(fp, overwrite=False, **kwargs) ))
+						successes.append((fp, thumbnail(fp, **kwargs) ))
 					except Exception as e:
 						error("'{}' failed: {}".format(fp, e))
 					nfiles += 1

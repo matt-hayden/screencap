@@ -10,7 +10,7 @@ class ImageMagickException(Exception):
 def montage(input_files, output_filename=None, options=[], **kwargs):
 	class MontageException(ImageMagickException):
 		pass
-	def _parse(b, prefix='STDOUT', encoding='ASCII', **kwargs):
+	def _parse(b, prefix='STDOUT', encoding=stream_encoding):
 		'''Example errors:
 		montage.im6: unable to open image `...': File name too long @ error/blob.c/OpenBlob/2638.
 		'''

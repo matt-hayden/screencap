@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import sys
 
-from .thumbnail import recurse
+from . import *
+from .cli import *
 
-myoptions = { 'tile': '8x', 'geometry': '+0+0', 'border': '1', 'quality': '35' }
-for src, ss in recurse(sys.argv[1:], **myoptions):
-	if ss:
-		print(src, "->", ss)
+debug(sys.executable+" "+sys.version+" on "+sys.platform)
+#sys.exit(run(*sys.argv[1:], overwrite=True))
+sys.exit(run(*sys.argv[1:]))
