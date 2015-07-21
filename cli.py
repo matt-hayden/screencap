@@ -4,7 +4,8 @@ import os, os.path
 from .thumbnail import thumbnail, recurse
 
 def run(*args, **kwargs):
-	options = kwargs or { 'tile': '8x', 'geometry': '+0+0', 'border': '1', 'quality': '35' }
+	options = { 'tile': '8x', 'geometry': '+0+0', 'border': '1', 'quality': '35', 'overwrite': False } # defaults
+	options.update(kwargs)
 	dirs = [ p for p in args if os.path.isdir(p) ]
 	files = set(args) - set(dirs)
 	for src in files:
