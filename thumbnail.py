@@ -6,7 +6,7 @@ import time
 from . import *
 
 debug("Loading modules")
-from .FFMpeg import thumbnails
+from .FFmpeg import thumbnails
 from .ImageMagick import montage
 
 def thumbnail(input_filename, output_filename=None, count=56, overwrite=True, **kwargs):

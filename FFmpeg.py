@@ -5,7 +5,7 @@ import time
 
 from . import *
 
-class FFMpegException(Exception):
+class FFmpegException(Exception):
 	pass
 def check_version(executables=['ffmpeg', 'avconv']):
 	for e in executables:
@@ -17,7 +17,7 @@ def check_version(executables=['ffmpeg', 'avconv']):
 	raise OSError()
 
 if sys.platform.startswith('win'):
-	ffmpeg_executable = 'FFMPEG.EXE'
+	ffmpeg_executable = 'FFmPEG.EXE'
 	ffprobe_executable = 'FFPROBE.EXE'
 else:
 	ffmpeg_executable, _ = check_version()
@@ -35,14 +35,14 @@ def parse_output(outs, errs='', returncode=None):
 		lastframeline = ''
 		line = b.decode(encoding).rstrip()
 		if 'Unrecognized option' in line:
-			raise FFMpegException(line)
+			raise FFmpegException(line)
 		elif 'At least one output file must be specified' in line:
-			raise FFMpegException(line)
+			raise FFmpegException(line)
 		elif 'Error opening filters!' in line:
-			raise FFMpegException(line)
+			raise FFmpegException(line)
 		elif 'Output file is empty, nothing was encoded' in line:
 			if lastframeline: error(lastframeline) #
-			raise FFMpegException(line)
+			raise FFmpegException(line)
 		elif 'Press [q] to stop, [?] for help' in line:
 			error('Running interactive (maybe try -nostdin if using ffmpeg later than the avconv fork)')
 		elif line.startswith('frame='): # progress
@@ -58,7 +58,7 @@ def parse_output(outs, errs='', returncode=None):
 	if errs:
 		for b in errs.splitlines():
 			_parse(b, prefix='STDERR')
-	#for b in outs.splitlines(): # FFMpeg doesn't believe in stdout
+	#for b in outs.splitlines(): # FFmpeg doesn't believe in stdout
 	#	_parse(b)
 	return returncode or 0
 def ffmpeg(commands, **kwargs):
@@ -84,9 +84,9 @@ def thumbnail_mosaic(input_file, output_file=None, **kwargs):
 	ffmpeg(['-nostdin', '-skip_frame', 'nokey', '-an', '-i', input_file, '-vf', "tile", '-frames:v', '1', '-vsync', '0', output_file], **kwargs)
 	try:
 		if not os.path.getsize(output_file):
-			raise FFMpegException()
+			raise FFmpegException()
 	except:
-		raise FFMpegException()
+		raise FFmpegException()
 	return output_file
 
 def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:-1'], **kwargs):
