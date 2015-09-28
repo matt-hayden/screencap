@@ -9,16 +9,17 @@ debug("Loading modules")
 from .FFmpeg import thumbnails
 from .ImageMagick import montage
 
-def thumbnail(input_filename, output_filename=None, count=56, overwrite=True, **kwargs):
+def thumbnail(input_filename, count, output_filename=None, overwrite=True, **kwargs):
 	"""Screencap generator for video files.
 
 	input:	required and assumed to be readable as a video file
-	output:	generalized from input if not given. The format is existing_filename-size-screens.ext
 	count:	total number of thumbnails to display
+	output:	generalized from input if not given. The format is existing_filename-size-screens.ext
 	overwrite:	by default, existing screens are overwritten
 
 	Other arguments are passed to the montage() method
 	"""
+	assert 0 < count
 	dirname, basename = os.path.split(input_filename)
 	filepart, _ = os.path.splitext(basename)
 	size = os.path.getsize(input_filename)

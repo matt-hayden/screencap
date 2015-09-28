@@ -1,9 +1,25 @@
 #!/usr/bin/env python3
+"""Generate contact sheets for video files
+  Usage:
+    Screencap [options] [--] [PATHS]...
+
+  Options:
+    -h --help  show this help message and exit
+    --version  show version and exit
+    -f, --overwrite=BOOL  Overwrite existing screencap files [default: False]
+    -q, --quality=STRING  JPEG compression [default: 35]
+    --border=STRING  Border width [default: 1]
+    --geometry=STRING  Geometry (see ImageMagick) [default: +0+0]
+    --columns=INT  Number of columns, followed by x [default: 8]
+    --rows=INT  Number of rows, followed by x [default: 7]
+
+"""
 import sys
 
-from . import *
-from .cli import *
+import docopt
 
-debug(sys.executable+" "+sys.version+" on "+sys.platform)
-#sys.exit(run(*sys.argv[1:], overwrite=True))
-sys.exit(run(*sys.argv[1:]))
+from . import *
+from .cli import main
+
+args = docopt.docopt(__doc__, version=__version__) # make sure to pop 'PATHS' out as file arguments
+sys.exit(main(*args.pop('PATHS'), **args))

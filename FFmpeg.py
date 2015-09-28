@@ -5,6 +5,8 @@ import time
 
 from . import *
 
+stream_encoding = 'UTF-8'
+
 class FFmpegException(Exception):
 	pass
 def check_version(executables=['ffmpeg', 'avconv']):
@@ -26,12 +28,12 @@ debug("ffmpeg is "+ffmpeg_executable)
 debug("ffprobe is "+ffprobe_executable)
 
 def parse_output(outs, errs='', returncode=None):
-	warnings = [ 'deprecated pixel format used, make sure you did set range correctly',
+	error_text = [ 'deprecated pixel format used, make sure you did set range correctly',
 				 'DTS discontinuity',
 				 'Invalid timestamp',
 				 'Non-increasing DTS',
 				 'VBV buffer size not set, muxing may fail' ]
-	def _parse(b, prefix='STDOUT', warnings=warnings, encoding=stream_encoding):
+	def _parse(b, prefix='STDOUT', error_text=error_text, encoding=stream_encoding):
 		lastframeline = ''
 		line = b.decode(encoding).rstrip()
 		if 'Unrecognized option' in line:
@@ -48,7 +50,7 @@ def parse_output(outs, errs='', returncode=None):
 		elif line.startswith('frame='): # progress
 			lastframeline = line
 		else:
-			for w in warnings:
+			for w in error_text:
 				if w in line:
 					warning(line)
 					break
@@ -62,7 +64,7 @@ def parse_output(outs, errs='', returncode=None):
 	#	_parse(b)
 	return returncode or 0
 def ffmpeg(commands, **kwargs):
-	timeout = kwargs.pop('timeout', 60*10)
+	timeout = kwargs.pop('timeout', 10*60)
 	kwargs['stderr'] = subprocess.PIPE
 	debug(commands)
 	proc = subprocess.Popen([ffmpeg_executable]+list(commands), **kwargs)
@@ -108,7 +110,7 @@ def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:
 	output_files = (os.path.join(output_dir, f) for f in os.listdir(output_dir))
 	new_files = sorted(f for f in output_files if st < os.path.getmtime(f))
 	n = len(new_files)
-	info("Wrote {:d} images in {:.0f} s, averaging {:.1f}".format(n, dur, (dur/n) if n else dur))
+	debug("Wrote {:d} images in {:.0f} s, averaging {:.1f}".format(n, dur, (dur/n) if n else dur))
 	if (output_file_pattern % 1) in new_files and (output_file_pattern % n) in new_files:
 		return (output_file_pattern % x for x in range(1, n+1))
 	else:

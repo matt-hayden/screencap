@@ -3,6 +3,8 @@ import subprocess
 
 from . import *
 
+stream_encoding = 'UTF-8'
+
 montage_executable = 'montage.im6'
 
 class ImageMagickException(Exception):
