@@ -11,26 +11,39 @@ debug("Loading modules")
 from .FFmpeg import thumbnails
 from .ImageMagick import montage
 
-def thumbnail(input_filename, count, output_filename=None, overwrite=True, **kwargs):
+def thumbnail(input_filename, count, output_filename='{filepart}-{size}-screens.JPG', title='{basename} - {size:,} B', overwrite=False, **kwargs):
 	"""Screencap generator for video files.
 
-	input:	required and assumed to be readable as a video file
-	count:	total number of thumbnails to display
-	output:	generalized from input if not given. The format is existing_filename-size-screens.ext
-	overwrite:	by default, existing screens are overwritten
+	input:  required and assumed to be readable as a video file
+	count:  total number of thumbnail images
+	output:  generalized from input if not given. Substitutions are made for {dirname}, {basename}, {size}, and {ext}
+	title:  text appearing on the thumbnail sheet. Substitutions are also made
+
+	overwrite
 
 	Other arguments are passed to the montage() method
 	"""
 	assert 0 < count
+
 	dirname, basename = os.path.split(input_filename)
-	filepart, _ = os.path.splitext(basename)
+	filepart, ext = os.path.splitext(basename)
 	size = os.path.getsize(input_filename)
-	if not output_filename:
-		output_filename = os.path.join(dirname, "{}-{}-screens.JPG".format(filepart, size))
-	if not overwrite and os.path.exists(output_filename):
-		warning("Refusing to overwrite '{}'".format(output_filename))
-		return None
-	title = "{} - {:,} B".format(basename, size)
+	try:
+		output_filename = os.path.join(dirname, output_filename.format(**locals()) )
+	except:
+		pass
+	if os.path.exists(output_filename):
+		if overwrite:
+			debug("Writing to {output_filename} (exists)".format(**locals()) )
+		else:
+			warning("Refusing to overwrite '{}'".format(output_filename))
+			return None
+	else:
+		debug("Writing to {output_filename}".format(**locals()))
+	try:
+		title = title.format(**locals())
+	except:
+		pass
 	with tempfile.TemporaryDirectory() as td:
 		fs = list(thumbnails(input_filename, output_file_pattern=os.path.join(td, '%08d.PNG')) )
 		n = len(fs)
@@ -64,8 +77,10 @@ def recurse(*args, video_detector=is_video_file, **kwargs):
 	Other arguments passed to the thumbnail() method:
 	overwrite:	by default, existing thumbnails are NOT overwritten
 	"""
-	options = { 'overwrite': False } # defaults
-	options.update(kwargs)
+	options = dict(kwargs)
+	debug("Options:")
+	for k, v in options.items():
+		debug("\t{k}: {v}".format(**locals()))
 	video_files = set()
 	for arg in args:
 		if os.path.isfile(arg):

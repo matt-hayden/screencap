@@ -4,16 +4,18 @@ import os, os.path
 from . import *
 
 def main(*args, **kwargs):
+	columns = int(kwargs.pop('--columns'))
 	options = {
 		'border': kwargs.pop('--border'),
-		'count': int(kwargs.pop('--rows'))*int(kwargs['--columns']),
+		'count': int(kwargs.pop('--rows'))*columns,
 		'geometry': kwargs.pop('--geometry'),
 		'overwrite': kwargs.pop('--overwrite'),
 		'quality': kwargs.pop('--quality'),
-		'tile': '{}x'.format(kwargs.pop('--columns'))
+		'tile': '{}x'.format(columns)
 		}
 	if kwargs:
 		debug("Unused arguments:")
 		for k, v in kwargs.items():
-			debug("{}={}".format(k, v))
-	return list(recurse(*args, **options))
+			debug("\t{}={}".format(k, v))
+	results = list(recurse(*args, **options) )
+	return all(tfn and os.path.exists(tfn) for vfn, tfn in results)
