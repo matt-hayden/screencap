@@ -66,7 +66,7 @@ def parse_output(outs, errs='', returncode=None):
 def ffmpeg(commands, **kwargs):
 	timeout = kwargs.pop('timeout', 10*60)
 	kwargs['stderr'] = subprocess.PIPE
-	debug(commands)
+	debug(" ".join(["Running", ffmpeg_executable]+list(commands)) )
 	proc = subprocess.Popen([ffmpeg_executable]+list(commands), **kwargs)
 	try:
 		outs, errs = proc.communicate(timeout=timeout)

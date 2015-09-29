@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import os, os.path
 import tempfile
-import time
+#import time
+
+import tqdm
 
 from . import *
 
@@ -53,7 +55,7 @@ def is_video_file(fp):
 		warning("Ignoring '{}'".format(fp))
 	return False
 #
-def recurse(args, video_detector=is_video_file, successes=[], **kwargs):
+def recurse(*args, video_detector=is_video_file, **kwargs):
 	"""Walk through directories generating thumbnails along the way.
 
 	args:	iterable of paths
@@ -64,19 +66,17 @@ def recurse(args, video_detector=is_video_file, successes=[], **kwargs):
 	"""
 	options = { 'overwrite': False } # defaults
 	options.update(kwargs)
-	st, nfiles = time.time(), 0
+	video_files = set()
 	for arg in args:
-		for root, dirs, files in os.walk(arg):
-			for fn in files:
-				fp = os.path.join(root, fn)
-				if video_detector(fp):
-					try:
-						successes.append((fp, thumbnail(fp, **options) ))
-					except Exception as e:
-						error("'{}' failed: {}".format(fp, e))
-					nfiles += 1
-				#else:
-				#	warning("Ignoring '{}'".format(fp))
-	dur = time.time() - st
-	info("Processed {:d} files in {:.0f} s, averaging {:.1f}".format(nfiles, dur, (dur/nfiles) if nfiles else dur))
-	return successes
+		if os.path.isfile(arg):
+			video_files += arg
+		elif os.path.isdir(arg):
+			for root, dirs, files in os.walk(arg):
+				dirs = [ d for d in dirs if not d.startswith('.') ]
+				files = [ f for f in files if not f.startswith('.') ]
+				fps = [ os.path.join(root, f) for f in files ]
+				video_files.update(fp for fp in fps if video_detector(fp))
+		else:
+			error("Ignoring argument '{}'".format(arg))
+	for fp in tqdm.tqdm(video_files, desc="Generating frames"):
+		yield fp, thumbnail(fp, **options)
