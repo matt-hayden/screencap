@@ -2,7 +2,7 @@
 import logging
 import sys
 
-__version__ = '0.2'
+__version__ = '0.3'
 __all__ = ['__version__']
 
 # basic logging:
@@ -13,6 +13,6 @@ debug, info, warning, error, panic = logger.debug, logger.info, logger.warning, 
 
 __all__.extend('debug warning info error panic'.split())
 
-from .thumbnail import thumbnail, recurse
+from .thumbnail import thumbnail, thumbdir, recurse
 
-__all__.extend('thumbnail recurse'.split())
+__all__.extend('thumbnail thumbdir recurse'.split())

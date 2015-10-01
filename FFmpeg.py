@@ -98,6 +98,7 @@ def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:
 	output_file_pattern:	%08d in this string is replaced with order number
 	options:	['-vf', 'scale=160:-1'] resizes images
 	"""
+	assert os.path.isfile(input_file)
 	if 'timeout' not in kwargs:
 		kwargs['timeout'] = os.path.getsize(input_file) / 5E6
 	if not output_file_pattern:
@@ -109,6 +110,8 @@ def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:
 	dur = time.time() - st
 	output_files = (os.path.join(output_dir, f) for f in os.listdir(output_dir))
 	new_files = sorted(f for f in output_files if st < os.path.getmtime(f))
+	if not new_files:
+		raise FFmpegException("No thumbnails extracted")
 	n = len(new_files)
 	debug("Wrote {:d} images in {:.0f} s, averaging {:.1f}".format(n, dur, (dur/n) if n else dur))
 	if (output_file_pattern % 1) in new_files and (output_file_pattern % n) in new_files:
