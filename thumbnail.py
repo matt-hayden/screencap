@@ -90,10 +90,11 @@ def thumbdir(root, count, output_filename='{label}-{size}-screens.JPG', title='{
 #
 def thumbnail(input_filename, **kwargs):
 	dirname, basename = os.path.split(input_filename)
+	label, _ = os.path.splitext(basename)
 	return thumbdir([input_filename],
 					output_filename=os.path.join(dirname, '{label}-{size}-screens.JPG'),
 					title='{label} ~ {size:,} B',
-					label=basename,
+					label=label,
 					**kwargs)
 #
 def recurse(*args, video_detector=is_video_file, **kwargs):
