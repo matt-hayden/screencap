@@ -75,7 +75,14 @@ def thumbdir(root, count, output_filename='{label}-{size}-screens.JPG', title='{
 	with tempfile.TemporaryDirectory() as td:
 		fs = []
 		for n, fn in enumerate(tqdm.tqdm(files, desc=root if label == "thumbnail" else label)):
-			fs.extend(thumbnails(fn, output_file_pattern=os.path.join(td, '{:08d}-'.format(n)+'%08d.PNG')) )
+			info(fn)
+			frames_out = list(thumbnails(fn, output_file_pattern=os.path.join(td, '{:08d}-'.format(n)+'%08d.PNG')) )
+			if frames_out:
+				debug("produced {} frames".format(len(frames_out)) )
+				fs.extend(frames_out)
+			else:
+				error("'{}' ignored".format(fn) )
+		assert fs
 		n = len(fs)
 		if n < count:
 			info("thumbdir() produced only {n} frames".format(**locals()) )
@@ -86,7 +93,10 @@ def thumbdir(root, count, output_filename='{label}-{size}-screens.JPG', title='{
 			selection = fs[::n//count]
 			while count < len(selection):
 				selection.pop(count//2)
-		return montage(selection, output_filename=output_filename, title=title, **kwargs)
+		return montage(selection,
+					   output_filename=output_filename,
+					   title=title,
+					   **kwargs)
 #
 def thumbnail(input_filename, **kwargs):
 	dirname, basename = os.path.split(input_filename)
