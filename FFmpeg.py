@@ -132,6 +132,17 @@ def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:
 		ffmpeg_commands = ['-nostdin', \
 						   '-i', input_file, \
 						   '-f', 'image2', \
+						   '-vf', 'fps=1/240'] \
+						  +options \
+						  +['-vsync', '0', output_file_pattern]
+		ffmpeg(ffmpeg_commands, **kwargs)
+		output_files = [ os.path.join(output_dir, f) for f in os.listdir(output_dir) ]
+		new_files = sorted(f for f in output_files if st < os.path.getmtime(f))
+	if not new_files:
+		info("ffmpeg {ffmpeg_commands} generated nothing, trying desperately".format(**locals()) )
+		ffmpeg_commands = ['-nostdin', \
+						   '-i', input_file, \
+						   '-f', 'image2', \
 						   '-vframes', '1'] \
 						  +options \
 						  +[output_file_pattern]
