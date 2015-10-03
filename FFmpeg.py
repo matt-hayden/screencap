@@ -123,7 +123,7 @@ def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:
 						   '-f', 'image2', \
 						   '-vf', "select='eq(pict_type,PICT_TYPE_I)'"] \
 						  +options \
-						  +['-vsync', '0', output_file_pattern]
+						  +['-vsync', 'vfr', output_file_pattern]
 		ffmpeg(ffmpeg_commands, **kwargs)
 		output_files = [ os.path.join(output_dir, f) for f in os.listdir(output_dir) ]
 		new_files = sorted(f for f in output_files if st < os.path.getmtime(f))
@@ -134,7 +134,7 @@ def thumbnails(input_file, output_file_pattern=None, options=['-vf', 'scale=160:
 						   '-f', 'image2', \
 						   '-vf', 'fps=1/240'] \
 						  +options \
-						  +['-vsync', '0', output_file_pattern]
+						  +[output_file_pattern]
 		ffmpeg(ffmpeg_commands, **kwargs)
 		output_files = [ os.path.join(output_dir, f) for f in os.listdir(output_dir) ]
 		new_files = sorted(f for f in output_files if st < os.path.getmtime(f))
