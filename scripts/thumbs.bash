@@ -100,8 +100,9 @@ esac
 
 if thumbs "$file_in" &> "$errors"
 then
+	echo "$dest"
 	exit 0
 else
-	cat "$errors"
-fi >&2
+	cat "$errors" >&2
+fi
 exit 1
