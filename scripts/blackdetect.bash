@@ -29,6 +29,7 @@ function die() {
 }
 
 
+mode=0
 while getopts ":hfno:qv0123456789 -:" OPT
 do
 	if [[ $OPT == '-' ]] # Long option
@@ -47,7 +48,7 @@ do
 		;;
 		q|quiet) quiet=1
 		;;
-		[0-9]) mode="$OPTARG"
+		[0-9]) mode=$OPT
 		;;
 		\?) usage # unrecognized options would cause bash error
 		;;
@@ -56,7 +57,7 @@ done >&2
 shift $((OPTIND-1))
 
 output_options="-show_entries tags=lavfi.black_start,lavfi.black_end,lavfi.scene_score -of flat"
-case mode in
+case $mode in
 	0)
 		function blackdetect() {
 			file_in="$1"
@@ -86,10 +87,10 @@ esac
 file_in="$1"
 shift
 [[ $out ]] || out="${file_in##*/}.blackdetect"
-[[ -e "$out" ]] && ! $((overwrite)) || die "Refusing to overwrite $out"
+#[[ -e "$out" ]] && ! $((overwrite)) || die "Refusing to overwrite $out"
 [[ "$@" ]] && usage
 
-if blackdetect "$file_in" >"$log" 2>"$errors"
+if blackdetect "$file_in" 2>"$errors" | pv -l >"$log"
 then
 	if [[ -s "$log" ]]
 	then

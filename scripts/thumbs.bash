@@ -26,7 +26,7 @@ function die() {
 	exit -1
 }
 
-mode=1
+mode=0
 while getopts ":hd:f:0123456789 -:" OPT
 do
 	if [[ $OPT == '-' ]] # Long option
@@ -67,7 +67,7 @@ filepart="${basename%.*}"
 mkdir -p "$dest"
 [[ $errors ]] || errors="$dest/errors"
 
-case mode in
+case $mode in
 	0|1|2)
 		function thumbs() {
 			file_in="$1"
