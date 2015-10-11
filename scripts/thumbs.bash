@@ -26,7 +26,7 @@ function die() {
 	exit -1
 }
 
-mode=0
+mode=5
 while getopts ":hd:f:0123456789 -:" OPT
 do
 	if [[ $OPT == '-' ]] # Long option
@@ -82,14 +82,14 @@ case $mode in
 			$FFMPEG -an -nostdin -i "$file_in" -f image2 -vf 'fps=1/240' -vsync drop "$out"
 		}
 	;;
-	5|6|7)
+	5|6)
 		function thumbs() {
 			file_in="$1"
 			out="${dest}/${filepart}_%08d${ext}"
 			$FFMPEG -an -nostdin -i "$file_in" -f image2 -vf select='eq(pict_type\,PICT_TYPE_I)' -vsync drop "$out"
 		}
 	;;
-	8|9)
+	7|8|9)
 		function thumbs() {
 			file_in="$1"
 			out="${format}:${dest}"

@@ -29,7 +29,7 @@ function die() {
 }
 
 
-mode=0
+mode=5
 while getopts ":hfno:qv0123456789 -:" OPT
 do
 	if [[ $OPT == '-' ]] # Long option
@@ -58,25 +58,32 @@ shift $((OPTIND-1))
 
 output_options="-show_entries tags=lavfi.black_start,lavfi.black_end,lavfi.scene_score -of flat"
 case $mode in
-	0)
+	0|1)
+		# default is 2 seconds
 		function blackdetect() {
 			file_in="$1"
 			$FFPROBE -f lavfi "movie=${file_in},blackdetect=[out0]" $output_options
 		}
 	;;
-	1|2|3)
+	2|3)
 		function blackdetect() {
 			file_in="$1"
 			$FFPROBE -f lavfi "movie=${file_in},blackdetect=d=1[out0]" $output_options
 		}
 	;;
-	4|5|6)
+	4|5)
+		function blackdetect() {
+			file_in="$1"
+			$FFPROBE -f lavfi "movie=${file_in},blackdetect=d=1/4[out0]" $output_options
+		}
+	;;
+	6|7)
 		function blackdetect() {
 			file_in="$1"
 			$FFPROBE -f lavfi "movie=${file_in},blackdetect=d=1/15[out0]" $output_options
 		}
 	;;
-	7|8|9)
+	8|9)
 		function blackdetect() {
 			file_in="$1"
 			$FFPROBE -f lavfi "movie=${file_in},blackdetect=d=1/30:picture_black_ratio_th=0.75:pixel_black_th=0.50[out0]" $output_options
