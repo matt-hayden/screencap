@@ -5,7 +5,7 @@ from decimal import Decimal
 from utils import *
 
 #
-class BlackDetectCut(collections.namedtuple('BlackDetectCut', 'start end')):
+class BlackDetectCut(collections.namedtuple('BlackDetectCut', 'start stop')):
 	@staticmethod
 	def from_frame_desc(p1, p2):
 		f1, d1 = p1
@@ -57,6 +57,8 @@ def parse(iterable):
 	if 'lavfi_black_start' in first_frame[1]['tags']:
 		if int(first_frame[0]) < 15: # frame number
 			frames.pop(0)
+	last_frame = frames[-1]
+	assert 'lavfi_black_start' in last_frame[1]['tags']
 	cutlist = BlackDetectCutList(frames)
 	_, last = cutlist[-1]
 	return { 'fps': last.get_fps(), 'frames': cutlist }
@@ -67,5 +69,8 @@ def load(filename):
 if __name__ == '__main__':
 	import pprint
 	import sys
-	bd=load(sys.argv[1])
-	pprint.pprint(bd)
+	bdd=load(sys.argv[1])
+	print("{[fps]} frames per second".format(bdd))
+	for n, cut in enumerate(bdd['frames']):
+		if 0.5 < cut.duration:
+			print(n, cut)
