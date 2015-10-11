@@ -2,7 +2,7 @@
 import collections
 from decimal import Decimal
 
-from utils import *
+from .utils import *
 
 #
 class BlackDetectCut(collections.namedtuple('BlackDetectCut', 'start stop')):
