@@ -65,7 +65,7 @@ def thumbdir(root, count, output_filename='{label}-{size}-screens.JPG', title='{
 			debug("Writing to {} (exists)".format(output_filename))
 		else:
 			warning("Refusing to overwrite '{}'".format(output_filename))
-			return None
+			return
 	else:
 		debug("Writing to {}".format(output_filename))
 	try:
