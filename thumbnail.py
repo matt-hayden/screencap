@@ -74,7 +74,7 @@ def thumbdir(root, count, output_filename='{label}-{size}-screens.JPG', title='{
 		warning("Using title '{}', which is not likely what you want".format(title) )
 	with tempfile.TemporaryDirectory() as td:
 		fs = []
-		for n, fn in enumerate(tqdm.tqdm(files, desc=root if label == "thumbnail" else label)):
+		for n, fn in enumerate(files):
 			info(fn)
 			frames_out = list(thumbnails(fn, output_file_pattern=os.path.join(td, '{:08d}-'.format(n)+'%08d.PNG')) )
 			if frames_out:

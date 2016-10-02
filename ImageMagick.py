@@ -6,6 +6,7 @@ from . import *
 stream_encoding = 'UTF-8'
 
 montage_executable = 'montage.im6'
+montage_executable = 'montage'
 
 class ImageMagickException(Exception):
 	pass
