@@ -58,7 +58,17 @@ def main(*args, **kwargs):
 			error("{} is a mix of files and directories, too confused")
 			return -1
 	else:
-		return not all(tfn and os.path.exists(tfn) for vfn, tfn in recurse(*args, **options) )
+		results = list(recurse(*args, **options))
+		if not results:
+			return 9
+		skipped = 0
+		for vfn, tfn in results:
+			if not tfn:
+				info("{} skipped".format(vfn))
+				skipped += 1
+		if skipped:
+			warning("{}/{} skipped".format(skipped, len(results)))
+			return 10
 
 
 kwargs = docopt.docopt(__doc__, version=__version__) # make sure to pop 'PATHS' out as file arguments
