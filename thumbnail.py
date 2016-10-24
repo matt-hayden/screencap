@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 import os, os.path
 import tempfile
-#import time
+import sys
 
-import tqdm
+if sys.stderr.isatty():
+	import tqdm
+	progress_bar = tqdm.tqdm
+else:
+	def progress_bar(iterable, **kwargs):
+		return iterable
 
 from . import *
 
@@ -132,7 +137,7 @@ def recurse(*args, video_detector=is_video_file, **kwargs):
 				video_files.update(fp for fp in fps if video_detector(fp))
 		else:
 			error("Ignoring argument '{}'".format(arg))
-	for fp in tqdm.tqdm(video_files):
+	for fp in progress_bar(video_files):
 		try:
 			yield fp, thumbnail(fp, **options)
 		except Exception as e:
