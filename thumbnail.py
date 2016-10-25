@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 import os, os.path
-import tempfile
 import sys
+import tempfile
 
-if sys.stderr.isatty():
-	import tqdm
-	progress_bar = tqdm.tqdm
-else:
-	def progress_bar(iterable, **kwargs):
-		return iterable
+import tqdm
 
 from . import *
 
@@ -56,7 +51,7 @@ def thumbdir(root, count, output_filename='{label}-{size}-screens.JPG', title='{
 		files = [ os.path.join(root, f) for f in os.listdir(root) ]
 		files = sorted(f for f in files if video_detector(f))
 	else:
-		raise ThumbnailError("{root} is not a directory or list of filenames")
+		raise ThumbnailError(root+" is not a directory or list of filenames")
 	label = label or "thumbnail"
 	assert files
 
@@ -104,6 +99,8 @@ def thumbdir(root, count, output_filename='{label}-{size}-screens.JPG', title='{
 					   **kwargs)
 #
 def thumbnail(input_filename, **kwargs):
+	if ':' in input_filename:
+		raise ThumbnailError(input_filename+" contains characters invalid to ffmpeg")
 	dirname, basename = os.path.split(input_filename)
 	label, _ = os.path.splitext(basename)
 	return thumbdir([input_filename],
@@ -125,20 +122,26 @@ def recurse(*args, video_detector=is_video_file, **kwargs):
 	debug("Options:")
 	for k, v in options.items():
 		debug("\t{k}: {v}".format(**locals()))
-	video_files = set()
+	# fit for scandir when it becomes available:
+	stat_by_file = {}
 	for arg in args:
 		if os.path.isfile(arg):
-			video_files.add(arg)
+			stat_by_file[arg] = os.stat(arg)
 		elif os.path.isdir(arg):
 			for root, dirs, files in os.walk(arg):
 				dirs = [ d for d in dirs if not d.startswith('.') ]
 				files = [ f for f in files if not f.startswith('.') ]
-				fps = [ os.path.join(root, f) for f in files ]
-				video_files.update(fp for fp in fps if video_detector(fp))
+				for f in files:
+					fp = os.path.join(root, f)
+					if video_detector(fp):
+						stat_by_file[fp] = os.stat(fp)
 		else:
 			error("Ignoring argument '{}'".format(arg))
-	for fp in progress_bar(video_files):
-		try:
-			yield fp, thumbnail(fp, **options)
-		except Exception as e:
-			error("{fp} failed: {e}".format(**locals()))
+	total_size = sum(stat.st_size for _, stat in stat_by_file.items())
+	with tqdm.tqdm(stat_by_file, total=total_size, unit='B', unit_scale=True, disable=not sys.stderr.isatty()) as progress_bar:
+		for fp, stat in stat_by_file.items():
+			try:
+				yield fp, thumbnail(fp, **options)
+			except Exception as e:
+				error("{fp} failed: {e}".format(**locals()))
+			progress_bar.update(stat.st_size)
