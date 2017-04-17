@@ -16,9 +16,6 @@
 
 """
 import os, os.path
-import sys
-
-import docopt
 
 from . import *
 
@@ -71,6 +68,11 @@ def main(*args, **kwargs):
 			return 10
 
 
-kwargs = docopt.docopt(__doc__, version=__version__) # make sure to pop 'PATHS' out as file arguments
-args = kwargs.pop('PATHS') or ['.']
-sys.exit(main(*args, **kwargs))
+if __name__ == '__main__':
+	import sys
+
+	import docopt
+
+	kwargs = docopt.docopt(__doc__, version=__version__) # make sure to pop 'PATHS' out as file arguments
+	args = kwargs.pop('PATHS') or ['.']
+	sys.exit(main(*args, **kwargs))
