@@ -3,8 +3,12 @@ import collections
 from decimal import Decimal
 
 from .utils import *
+try:
+	from . import debug, info, warning, error, fatal
+except:
+	debug = info = warning = error = fatal = print
 
-#
+
 class BlackDetectCut(collections.namedtuple('BlackDetectCut', 'start stop')):
 	@staticmethod
 	def from_frame_desc(p1, p2):
@@ -62,10 +66,13 @@ def parse(iterable):
 	cutlist = BlackDetectCutList(frames)
 	_, last = cutlist[-1]
 	return { 'fps': last.get_fps(), 'frames': cutlist }
-#
+
+
 def load(filename):
 	with open(filename) as fi:
 		return parse(fi)
+
+
 if __name__ == '__main__':
 	import pprint
 	import sys

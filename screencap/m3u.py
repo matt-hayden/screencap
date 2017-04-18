@@ -5,9 +5,10 @@ from decimal import Decimal
 import os.path
 
 try:
-	from . import debug, info, warning, error, panic
+	from . import debug, info, warning, error, fatal
 except:
-	debug = info = warning = error = panic = print
+	debug = info = warning = error = fatal = print
+
 
 def sanitize_label(text):
 	"""clipper.lua leaves default names with a funny pattern"""
@@ -25,10 +26,12 @@ def sanitize_path(text):
 	except:
 		pass
 	return text
-#
+
+
 class M3UError(Exception):
 	pass
-#
+
+
 class M3UCut(collections.namedtuple('M3UCut', 'start_time stop_time label filename')):
 	'''
 	A cut has should have the following members:
@@ -87,7 +90,7 @@ def _parse(text):
 def load(filename):
 	with open(filename) as fi:
 		return sorted(_parse(fi.read()), key=lambda row: row.start_time)
-#
+
 
 def form_m3u_entry(filename, start_time=-1, stop_time=-1, label=None, time_format='.3f'):
 	assert filename
@@ -115,7 +118,8 @@ def form_ExtPlaylist(cuts, filename='', label_format='Segment {n}'):
 		except:
 			label = None
 		yield from form_m3u_entry(fn or filename, a, b, label or label_format.format(**locals()) )
-#
+
+
 def save(cuts, fp, **kwargs):
 	if hasattr(fp, 'write'):
 		pos = fp.tell()
@@ -129,7 +133,8 @@ def save(cuts, fp, **kwargs):
 		assert ext.upper() == '.M3U'
 		with open(fp, 'w') as fo:
 			return save(cuts, fo, **kwargs)
-#
+
+
 if __name__ == '__main__':
 	import pprint
 	import sys

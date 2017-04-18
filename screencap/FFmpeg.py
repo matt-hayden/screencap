@@ -1,9 +1,14 @@
+
 import os, os.path
 import subprocess
 import sys
 import time
 
-from . import *
+try:
+	from . import debug, info, warning, error, fatal
+except:
+	debug = info = warning = error = fatal = print
+
 
 stream_encoding = 'UTF-8'
 standard_global_options = ['-nostdin', '-skip_frame', 'nokey', '-an']
@@ -21,7 +26,7 @@ def check_version(executables=['ffmpeg', 'avconv']):
 	raise OSError()
 
 if sys.platform.startswith('win'):
-	ffmpeg_executable = 'FFmPEG.EXE'
+	ffmpeg_executable = 'FFMPEG.EXE'
 	ffprobe_executable = 'FFPROBE.EXE'
 else:
 	ffmpeg_executable, _ = check_version()
@@ -37,7 +42,7 @@ def parse_output(outs, errs='', returncode=None):
 				 'VBV buffer size not set, muxing may fail' ]
 	def _parse(b, prefix='STDOUT', error_text=error_text, encoding=stream_encoding):
 		lastframeline = ''
-		line = b.decode(encoding).rstrip()
+		line = b.decode().rstrip()
 		if 'Unrecognized option' in line:
 			raise FFmpegException(line)
 		elif 'At least one output file must be specified' in line:

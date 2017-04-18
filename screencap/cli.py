@@ -17,7 +17,11 @@
 """
 import os, os.path
 
-from . import *
+
+try:
+	from . import debug, info, warning, error, fatal
+except:
+	debug = info = warning = error = fatal = print
 
 
 def main(*args, **kwargs):
@@ -73,6 +77,6 @@ if __name__ == '__main__':
 
 	import docopt
 
-	kwargs = docopt.docopt(__doc__, version=__version__) # make sure to pop 'PATHS' out as file arguments
+	kwargs = docopt.docopt(__doc__, version='1.0.2.dev1') # make sure to pop 'PATHS' out as file arguments
 	args = kwargs.pop('PATHS') or ['.']
 	sys.exit(main(*args, **kwargs))

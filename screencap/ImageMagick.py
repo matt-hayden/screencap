@@ -1,7 +1,12 @@
+
 import os, os.path
 import subprocess
 
-from . import *
+try:
+	from . import debug, info, warning, error, fatal
+except:
+	debug = info = warning = error = fatal = print
+
 
 stream_encoding = 'UTF-8'
 
@@ -17,7 +22,7 @@ def montage(input_files, output_filename=None, options=[], **kwargs):
 		'''Example errors:
 		montage.im6: unable to open image `...': File name too long @ error/blob.c/OpenBlob/2638.
 		'''
-		line = b.decode(encoding).rstrip()
+		line = b.decode().rstrip()
 		if 'unable to open image' in line:
 			raise MontageException(line)
 		else:

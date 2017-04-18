@@ -1,11 +1,15 @@
-#!/usr/bin/env python3
+
 import os, os.path
 import sys
 import tempfile
 
-import tqdm
 
-from . import *
+try:
+	from . import debug, info, warning, error, fatal
+except:
+	debug = info = warning = error = fatal = print
+from . import progress_bar
+
 
 debug("Loading modules")
 from .FFmpeg import thumbnails
@@ -138,10 +142,10 @@ def recurse(*args, video_detector=is_video_file, **kwargs):
 		else:
 			error("Ignoring argument '{}'".format(arg))
 	total_size = sum(stat.st_size for _, stat in stat_by_file.items())
-	with tqdm.tqdm(stat_by_file, total=total_size, unit='B', unit_scale=True, disable=not sys.stderr.isatty()) as progress_bar:
+	with progress_bar(stat_by_file, total=total_size, unit='B', unit_scale=True, disable=not sys.stderr.isatty()) as pb:
 		for fp, stat in stat_by_file.items():
 			try:
 				yield fp, thumbnail(fp, **options)
 			except Exception as e:
 				error("{fp} failed: {e}".format(**locals()))
-			progress_bar.update(stat.st_size)
+			pb.update(stat.st_size)

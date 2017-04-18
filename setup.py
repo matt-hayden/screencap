@@ -1,9 +1,9 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
 setup(name='screencap',
       use_vcs_version=True,
       description='Simple screen capture and montage',
-      url='http://github.com/matt-hayden/screencap',
+      url='https://github.com/matt-hayden/screencap',
 	  maintainer="Matt Hayden",
 	  maintainer_email="github.com/matt-hayden",
       license='Unlicense',
@@ -13,6 +13,7 @@ setup(name='screencap',
 	  },
 	  # TODO: ImageMagick and ffmpeg requirements are outside Python
       install_requires=[
+		"docopt >= 0.6.2",
 		"tqdm >= 4.10",
       ],
       zip_safe=True,

@@ -1,7 +1,11 @@
 import subprocess
 import sys
 
-from . import *
+try:
+	from . import debug, info, warning, error, fatal
+except:
+	debug = info = warning = error = fatal = print
+
 
 def check_version(executables=['mplayer']):
 	for e in executables:
@@ -11,6 +15,7 @@ def check_version(executables=['mplayer']):
 		except OSError:
 			pass
 	raise OSError()
+
 
 if sys.platform.startswith('win'):
 	mplayer_executable = 'MPLAYER.EXE'
