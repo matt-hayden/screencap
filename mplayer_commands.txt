@@ -1,8 +1,0 @@
-Uses a combination of the following mplayer commands:
-'-benchmark -nosound -quiet -zoom'.split()
-[ '-speed', '100' ]
-[ '-vf', 'framestep=I,scale=420:-3,tile=5:8' ]
-[ '-vf', 'framestep=I,decimate=5,scale=420:-3,tile=5:8:40' ]
-[ '-vf', 'framestep=I,decimate=30,scale=420:-3,tile=5:8:40' ]
-[ '-vo', 'jpeg:outdir='+tmp ]
-[ '-sstep', '60' ]
