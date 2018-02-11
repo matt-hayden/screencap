@@ -3,8 +3,6 @@ import logging
 logger = logging.getLogger()
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
-import sys
-
 from .m3u import M3U
 from .ffprobe import get_info
 from .ffmpeg import make_tiles
@@ -19,34 +17,28 @@ def parse_playlist(playlist_filename):
     Processes a M3U playlist, injecting values for title and duration for each entry.
     """
     playlist = M3U(playlist_filename)
+    new_entries = [ ]
     for e in playlist:
-        url = e['url']
-        filename = e['filename']
-        media_info = None
-        title = e.get('title', None)
-        if not title:
-            tags = e['m3u_meta']['tags']
-            if tags:
-                title = e['title'] = tags.pop(0)
-        if not title:
-            media_info = media_info or get_info(url) or {}
-            title = e['title'] = media_info.pop('title', None)
-        if not title:
-            title = e['title'] = filename.rsplit('.', 1)[0]
-        duration = e.get('duration', None)
-        if not duration:
-            media_info = media_info or get_info(url) or {}
-            duration = e['duration'] = media_info.pop('duration', None)
-        if not duration:
-            duration = e['direction'] = e['m3u_meta'].pop('duration', None)
-        e['ffprobe_meta'] = media_info
+        if all(e.get(n) for n in 'duration title'.split()):
+            continue
+        m = get_info(e['path'])
+        m.update(e)
+        new_entries.append(m)
+    playlist.entries = new_entries
     return playlist
 
 
 def screencap_playlist(*args, **kwargs):
-    for e in parse_playlist(*args, **kwargs):
-        url = e['url']
-        if not make_tiles( url \
-                         , duration=e['duration'] \
+    pl = parse_playlist(*args, **kwargs)
+    if not pl:
+        warning("Empty playlist")
+    if __debug__:
+        for e in pl:
+            debug("%s (%s): %s", e['title'], e['path'], sorted(e))
+        for line in pl.get_lines():
+            debug(line)
+    for e in pl:
+        if not make_tiles( input_path=e['path'] \
+                         , media_info=e \
                          , output_filename=clean_filename(e['filename'])+'_screens.jpeg'):
-            error("Screencaps for '%s' failed", url)
+            error("Screencaps for '%s' failed", e['path'])

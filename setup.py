@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 
 setup(name='PyScreencap',
-      version = "3.0a1",
+      version = "3.0a2",
       description='Simple tiled screencaps of local and remote video',
       url='https://github.com/matt-hayden/screencap',
       maintainer="Matt Hayden (Valenceo, LTD.)",
