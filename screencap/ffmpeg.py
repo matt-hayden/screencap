@@ -72,8 +72,9 @@ def make_tiles(input_filename, duration=None, n=6*5, output_filename=None, skip_
         return False
     if not annotation:
         return True
-    convert_args = [ output_filename, '-fill', 'gray95', '-undercolor', '#00000080', \
-        '-font', 'Palatino-Bold', '-pointsize', '48', '-antialias' ]
+    convert_args = [ output_filename, '-resize', '2000000@>', \
+        '-fill', 'gray95', '-undercolor', '#00000080', \
+        '-font', 'Palatino-Bold', '-pointsize', '32', '-antialias' ]
     for text, direction in zip(annotation, 'northwest northeast southwest southeast'.split()):
         if text:
             text = '  '+text.format(**locals())+'  '
