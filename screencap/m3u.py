@@ -67,10 +67,22 @@ class M3U:
             elif isinstance(line, Comment):
                 comments.append(line)
             elif isinstance(line, URI):
-                self.entries.append({'uri': str(line), 'm3u_meta': meta, 'comments': comments})
+                self.entries.append({'url': str(line), 'm3u_meta': meta, 'comments': comments})
                 meta, comments = {}, []
             else:
                 error("Unknown parsed output: %s", line)
+    def get_lines(self):
+        if self.entries:
+            yield '#EXTM3U'
+        for e in self.entries:
+            title = e.get('title', None)
+            duration = e.get('duration', None)
+            if title or duration:
+                yield '\nEXTINF:%s,%s' % (duration or '-1', title or '')
+            yield '%s' % e['url']
+    def to_file(self, filename, mode='w'):
+        with open(filename, mode) as fo:
+            fo.write( '\n'.join(self.get_lines()) )
 
 
 if __name__ == '__main__':

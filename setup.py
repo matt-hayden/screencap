@@ -11,6 +11,7 @@ setup(name='PyScreencap',
       entry_points = {
           'console_scripts': [
               'screencap=screencap.cli:main',
+              'playlist_metadata=screencap.playlist_metadata_cli:main',
               ]
       },
       zip_safe=True # but, ffmpeg and convert-im6 need to be on the system
