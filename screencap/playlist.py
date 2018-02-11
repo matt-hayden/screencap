@@ -9,8 +9,8 @@ from .m3u import M3U
 from .ffmpeg import make_tiles
 
 
-def clean_filename(text):
-    return ''.join('-' if c in '/' else c for c in text.replace(' ', '_'))
+def clean_filename(text, dropchars='/'):
+    return ''.join('-' if (c in dropchars) else c for c in text.replace(' ', '_'))
 
 
 def screencap_playlist(playlist_filename):
@@ -30,9 +30,3 @@ def screencap_playlist(playlist_filename):
             duration = e['direction'] = e['m3u_meta'].pop('duration', None)
         if not make_tiles(uri, duration=duration, output_filename=clean_filename(title)+'_screens.jpeg'):
             error("Screencaps for '%s' failed", uri)
-
-
-def main():
-    execname, *args = sys.argv
-    for arg in args:
-        screencap_playlist(arg)

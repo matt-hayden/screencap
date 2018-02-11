@@ -1,19 +1,26 @@
 #! /usr/bin/env python3
 import logging
-logger = logging.getLogger()
-debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
-
 import os.path
 import sys
 
 from .ffmpeg import make_tiles
 from .playlist import screencap_playlist
 
-def main():
+
+def splitext(text):
+    parts = text.rsplit('.', 1)
+    if (1 == len(parts)):
+        return parts.pop(), ''
+    return parts[0], '.'+parts[1]
+
+
+def main(verbose=__debug__, playlist_extensions='.m3u .m3u8'.split()):
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
     execname, *args = sys.argv
     for arg in args:
-        _, ext = os.path.splitext(arg)
-        if ext.lower in '.m3u .m3u8'.split():
+        _, ext = splitext(arg)
+        if ext.lower() in playlist_extensions:
             screencap_playlist(arg)
         else:
             make_tiles(arg)

@@ -19,7 +19,7 @@ def make_tiles(input_filename, duration=None, n=6*5, output_filename=None, skip_
     """
     FFMpeg tile filter defaults to 6 columns x 5 rows
     """
-    media_info = get_info(input_filename)
+    media_info = get_info(input_filename) or {}
     file_size = media_info.get('file_size', None)
     title = media_info.get('title', None) or input_filename.rsplit('/', 1)[-1]
     if duration is None:
@@ -72,6 +72,10 @@ def make_tiles(input_filename, duration=None, n=6*5, output_filename=None, skip_
         return False
     if not annotation:
         return True
+    s = os.stat(output_filename)
+    if (s.st_size <= 0):
+        error("ffmpeg failed on '%s'", input_filename)
+        return False
     convert_args = [ output_filename, '-resize', '2000000@>', \
         '-fill', 'gray95', '-undercolor', '#00000080', \
         '-font', 'Palatino-Bold', '-pointsize', '32', '-antialias' ]
