@@ -3,7 +3,17 @@ import logging
 logger = logging.getLogger()
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
+
 import collections
+import urllib.parse
+
+
+def url_parse(text, urlparse=urllib.parse.urlparse):
+    parts = urlparse(text)
+    server = parts.netloc.split(':', 1)[0]
+    filename = parts.path.rsplit('/', 1)[-1]
+    return { 'filename': filename, 'server': server }
+
 
 class M3U_line(collections.namedtuple('M3U_line', 'text lineno')):
     def __str__(self):
@@ -19,37 +29,41 @@ class M3U_meta(Comment):
         duration, *tags = s.split(',')
         return { 'duration': None if (duration == '-1') else duration, \
                  'tags': tags }
-class URI(M3U_line):
+class URL(M3U_line):
     pass
 
 
 def read_file(arg, mode='rU'):
     """
-    m3u files have several encodings
-    m3u8 files are UTF-8
+    Generator yielding one object per non-blank line in input file.
+
+    Note that m3u files have several encodings; m3u8 files are UTF-8.
     """
     with open(arg, mode) as fi:
         lines = [ line.strip() for line in fi ]
-    for lineno, line in enumerate(lines, start=1):
-        if line:
-            if line == '#EXTM3U':
-                yield FileHeader(lines.pop(0), lineno)
-            else:
-                info("No header found")
-            break
-    else:
+    if not lines:
         error("Empty file")
         raise StopIteration()
-    for lineno, line in enumerate(lines, start=lineno):
+    for lineno, line in enumerate(lines, start=1):
         if line.startswith('#'):
-            if line.startswith('#EXT'):
+            if line.startswith('#EXTM3U'):
+                yield FileHeader(line, lineno)
+            elif line.startswith('#EXT'):
                 yield M3U_meta(line, lineno)
             else:
                 yield Comment(line, lineno)
         elif line:
-            yield URI(line, lineno)
+            yield URL(line, lineno)
+
 
 class M3U:
+    """
+    The .entries iterable contains dictionaries with the following keys:
+        url:        unquoted URL
+        filename:   last relevant part of url
+        m3u_meta:   metadata preserved in m3u format
+        comments:   non-metadata preceding URL in m3u format
+    """
     def __init__(self, arg):
         self.from_file(arg)
     def __len__(self):
@@ -59,15 +73,20 @@ class M3U:
     def from_file(self, *args, **kwargs):
         self.header, self.entries = None, []
         meta, comments = {}, []
-        for line in read_file(*args, **kwargs):
+        lines = list(read_file(*args, **kwargs))
+        for line in lines:
             if isinstance(line, FileHeader):
                 self.header = line
             elif isinstance(line, M3U_meta):
                 meta.update(line.to_dict())
             elif isinstance(line, Comment):
                 comments.append(line)
-            elif isinstance(line, URI):
-                self.entries.append({'url': str(line), 'm3u_meta': meta, 'comments': comments})
+            elif isinstance(line, URL):
+                url = str(line)
+                e = {'url': url, 'm3u_meta': meta, 'comments': comments}
+                e.update(url_parse(url))
+                self.entries.append(e)
+
                 meta, comments = {}, []
             else:
                 error("Unknown parsed output: %s", line)
@@ -75,18 +94,12 @@ class M3U:
         if self.entries:
             yield '#EXTM3U'
         for e in self.entries:
+            yield ''
             title = e.get('title', None)
             duration = e.get('duration', None)
             if title or duration:
-                yield '\nEXTINF:%s,%s' % (duration or '-1', title or '')
+                yield 'EXTINF:%s,%s' % (duration or '-1', title or e['filename'].rsplit('.', 1)[0])
             yield '%s' % e['url']
     def to_file(self, filename, mode='w'):
         with open(filename, mode) as fo:
             fo.write( '\n'.join(self.get_lines()) )
-
-
-if __name__ == '__main__':
-    import sys
-    args = sys.argv[1:]
-    for arg in args:
-        m = M3U(arg)
