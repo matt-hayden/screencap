@@ -52,6 +52,12 @@ def get_info(arg, failures_allowed_per_host=5, urlparse=urllib.parse.urlparse):
         bit_rate = d['bit_rate'] = float(probe_format.pop('bit_rate')) or None
     d['_ffprobe_meta'] = probe_results
 
+    extradata_hashes = d['hashes'] = []
+    for s in probe_results['streams']:
+        h = s.pop('extradata_hash', None)
+        if h:
+            *hash_type, hash_s = h.split(':')
+            extradata_hashes.append( (hash_type, int(hash_s, 16)) )
     probe_video_streams = [ s for s in probe_results['streams'] if s['codec_type'].startswith('video') ]
     probe_audio_streams = [ s for s in probe_results['streams'] if s['codec_type'].startswith('audio') ]
     probe_chapters = probe_results.get('chapters', None)
@@ -63,10 +69,12 @@ def get_info(arg, failures_allowed_per_host=5, urlparse=urllib.parse.urlparse):
     if (n_video_streams == 0):
         return d
     elif (n_video_streams == 1):
-        probe_video = d['video'] = probe_video_streams.pop()
+        probe_video = probe_video_streams.pop()
     else:
         probe_video_streams.sort(key=lambda vs: -vs['bit_rate'])
         probe_video = probe_video_streams.pop(0)
     width = d['width'] = int(probe_video.pop('width'))
     height = d['height'] = int(probe_video.pop('height'))
+    fps = d['fps'] = probe_video.pop('average_frame_rate')
+    nb_frames = d['nb_frames'] = probe_video.pop('nb_frames')
     return d
