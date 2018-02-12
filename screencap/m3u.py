@@ -22,7 +22,7 @@ class M3U_meta(Comment):
         duration, *tags = s.split(',')
         title = tags.pop(0)
         d = {}
-        if (duration != '-1'):
+        if (duration not in ['', '0', '-1']):
             d['duration'] = duration
         if title:
             d['title'] = title
@@ -47,8 +47,12 @@ def read_file(arg, mode='rU'):
 
     Note that m3u files have several encodings; m3u8 files are UTF-8.
     """
-    with open(arg, mode) as fi:
-        lines = [ line.strip() for line in fi ]
+    if isinstance(arg, str):
+        filename = arg
+        with open(arg, mode) as fi:
+            lines = [ line.strip() for line in fi ]
+    else:
+        lines = [ line.strip() for line in arg ]
     if not lines:
         error("Empty file")
         raise StopIteration()
@@ -119,3 +123,6 @@ class M3U:
     def to_file(self, filename, mode='w'):
         with open(filename, mode) as fo:
             fo.write( '\n'.join(self.get_lines()) )
+    def sort(self, *args, **kwargs):
+        if self.entries:
+            return self.entries.sort(*args, **kwargs)

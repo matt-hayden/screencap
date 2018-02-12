@@ -12,16 +12,16 @@ def clean_filename(text, dropchars='/;:<>&'):
     return ''.join('-' if (c in dropchars) else c for c in text.replace(' ', '_'))
 
 
-def parse_playlist(playlist_filename):
+def parse_playlist(*args):
     """
     Processes a M3U playlist, injecting values for title and duration for each entry.
     """
-    playlist = M3U(playlist_filename)
+    playlist = M3U(*args)
     new_entries = [ ]
     for e in playlist:
         if all(e.get(n) for n in 'duration title'.split()):
             continue
-        m = get_info(e['path'])
+        m = get_info(e['path']) or {}
         m.update(e)
         new_entries.append(m)
     playlist.entries = new_entries
