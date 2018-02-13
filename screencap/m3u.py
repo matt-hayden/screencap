@@ -5,21 +5,12 @@ debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger
 
 
 import collections
+from datetime import datetime
 import urllib.parse
 
+from .util import *
 
-def pathsplit(text):
-    p = text.rsplit('/', 1)
-    if len(p) == 1:
-        return '', p[0]
-    return p
-
-
-def splitext(text):
-    p = text.rsplit('.', 1)
-    if len(p) == 1:
-        return p[0], ''
-    return p[0], '.'+p[-1]
+now = datetime.now
 
 
 class M3U_line(collections.namedtuple('M3U_line', 'text lineno')):
@@ -32,10 +23,13 @@ class FileHeader(Comment):
 class M3U_meta(Comment):
     pass
 class M3U_INF(M3U_meta):
-    def to_dict(self):
-        assert self.text.startswith('#EXTINF:')
-        s = self.text[len('#EXTINF:'):]
+    def parse(self, label='#EXTINF:'):
+        assert self.text.startswith(label)
+        s = self.text[len(label):]
         duration, *tags = s.split(',')
+        return duration, tags
+    def to_dict(self):
+        duration, tags = self.parse()
         title = tags.pop(0)
         d = {}
         if (duration not in ['', '0', '-1']):
@@ -45,11 +39,17 @@ class M3U_INF(M3U_meta):
         if tags:
             d['tags'] = tags
         return d
+class M3U_VLCOPT(M3U_meta):
+    def parse(self, label='#EXTVLCOPT:'):
+        assert self.text.startswith(label)
+        s = self.text[len(label):]
+        k, v = s.split('=', 1)
+        return k.strip(), v.strip()
 class M3U_GRP(M3U_meta):
-    def to_dict(self):
-        assert self.text.startswith('#EXTGRP:')
-        s = self.text[len('#EXTGRP:'):]
-        return { 'group': s.strip() }
+    def parse(self, label='#EXTGRP:'):
+        assert self.text.startswith(label)
+        s = self.text[len(label):]
+        return s.strip().capitalize()
 class M3U_path(M3U_line):
     def to_dict(self, urlparse=urllib.parse.urlparse):
         url = urlparse(self.text)
@@ -88,6 +88,8 @@ def read_playlist(arg, mode='rU'):
                 yield M3U_INF(line, lineno)
             elif line.startswith('#EXTGRP'):
                 yield M3U_GRP(line, lineno)
+            elif line.startswith('#EXTVLCOPT'):
+                yield M3U_VLCOPT(line, lineno)
             else:
                 yield Comment(line, lineno)
             continue
@@ -100,7 +102,7 @@ def read_playlist(arg, mode='rU'):
         yield p
 
 
-class M3U:
+class M3U_base:
     """
     The .entries iterable contains dictionaries with the following keys:
         filename:   if derived from url, un-percent-encoded
@@ -110,30 +112,38 @@ class M3U:
         url:        url tuple
     Optionally:
         duration:   number of seconds
+        groups:     some sort of tagging
         tags:       tags other than title (may show up as album in VLC)
         title:      tagged title
 
     Internally:
-        _m3u_meta:   metadata preserved in m3u format
+        _m3u_meta:  metadata preserved in m3u format
+        VLCOPT:     parameters injected by VLC
     """
     def __init__(self, *args):
+        self.header, self.entries = None, []
         self.from_iterable(read_playlist(*args))
     def __len__(self):
         return len(self.entries)
     def __iter__(self):
         return iter(self.entries)
+    def sort(self, *args, **kwargs):
+        if self.entries:
+            return self.entries.sort(*args, **kwargs)
     def from_iterable(self, iterable):
-        self.header, self.entries = None, []
-        groups, meta, meta_lines, comments = [], {}, [], []
+        groups, meta, meta_lines, comments, vlcopt = set(), {}, [], [], collections.OrderedDict()
         order = 0
         for token in iterable:
-            if isinstance(token, FileHeader):
+            if isinstance(token, FileHeader): # multiple may exist in a file
                 self.header = token
             elif isinstance(token, M3U_INF):
                 meta_lines.append(token)
                 meta.update(token.to_dict())
             elif isinstance(token, M3U_GRP):
-                groups.append(token.to_dict()['group'])
+                groups.add(token.parse())
+            elif isinstance(token, M3U_VLCOPT):
+                k, v = token.parse()
+                vlcopt[k] = v
             elif isinstance(token, Comment):
                 comments.append(token)
             elif isinstance(token, M3U_path): # includes playlists
@@ -148,17 +158,23 @@ class M3U:
                 if comments:
                     e['comments'], comments = comments, []
                 if groups:
-                    e['groups'], groups = groups, []
+                    e['groups'], groups = groups, set()
+                if vlcopt:
+                    e['VLCOPT'], vlcopt = vlcopt, collections.OrderedDict()
                 self.entries.append(e)
             else:
                 error("Programming error: %s is unexpectedly type %s", token, type(token))
+class M3U(M3U_base):
     def get_lines(self, verbose=False):
         if self.entries:
             yield '#EXTM3U'
+            if verbose:
+                yield '# %s' % now()
         for e in self.entries:
             yield ''
             duration = e.get('duration', None)
             title = e.get('title', None)
+            vlcopt = e.get('VLCOPT', {})
             if 'playlist' in e:
                 mock_title = e['playlist']
             else:
@@ -167,24 +183,47 @@ class M3U:
             groups = e.get('groups', [])
             if verbose:
                 yield '#'
-                yield '# %s' % (title or mock_title)
+                yield '# "%s"' % (title or mock_title)
+                if tags:
+                    yield '# '+', '.join(tags)
                 if 'status' in e:
-                    yield '# Status %s' % e['status']
+                    yield '# %s status %s' % e['status'] # e['status'] is supposed to be a 2-tuple
                 yield '#'
-                bit_rate = e.get('bit_rate', None)
-                dimensions = (e.get('width', 0), e.get('height', 0))
+                #
+                bit_rate	= e.get('bit_rate', None)
+                chapters	= e.get('chapters', [])
+                dimensions	= (e.get('width', 0), e.get('height', 0))
+                file_size	= e.get('file_size', None)
+                hashes  	= e.get('extradata_hashes', [])
+                #
                 if bit_rate:
-                    yield '# %.2f Mbit' % bit_rate/1E6
+                    assert isinstance(bit_rate, (int, float))
+                    yield '# %.2f Mbit' % (bit_rate/1E6)
+                if file_size is not None:
+                    yield '# {:,d} bytes'.format(file_size)
                 if any(dimensions):
                     yield '# %sx%s' % dimensions
-            if duration or title or tags:
+                if chapters:
+                    yield '#'
+                    yield '# %d chapters' % len(chapters)
+                if hashes:
+                    yield '#'
+                    yield '# extradata_hash found:'
+                    for h in hashes:
+                        yield '#   ' + str(h)
+                    yield '#'
+            for k, v in vlcopt.items():
+                yield '#EXTVLCOPT:%s=%s' % (k, v)
+            if duration or title or tags or vlcopt:
                 yield '#EXTINF:%s,%s' % (duration or '-1', ','.join( ([title]+tags if title else tags) ))
             if groups:
-                yield '#EXTGRP:%s' % ', '.join(groups)
-            yield '%s' % (e['url'].geturl() if 'url' in e else e.get('path', None) or e['playlist'])
-    def to_file(self, filename, mode='w'):
+                for g in sorted(groups):
+                    yield '#EXTGRP:%s' % g
+            if 'url' in e:
+                yield e['url'].geturl()
+            else:
+                yield e.get('path', None) or e['playlist'] # TODO
+    def to_file(self, filename, mode='w', **kwargs):
         with open(filename, mode) as fo:
-            fo.write( '\n'.join(self.get_lines()) )
-    def sort(self, *args, **kwargs):
-        if self.entries:
-            return self.entries.sort(*args, **kwargs)
+            c = fo.write( '\n'.join(self.get_lines(**kwargs)) )
+            fo.write('\n')

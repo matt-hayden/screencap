@@ -3,9 +3,14 @@ import logging
 logger = logging.getLogger()
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
+import collections
 import json
 import subprocess
 
+
+class FFProbeHash(collections.namedtuple('ExtraDataHash', 'types value')):
+    def __str__(self):
+        return '%s:%X' %(':'.join(self.types), self.value)
 
 def get_info(arg):
     """
@@ -34,12 +39,12 @@ def get_info(arg):
         bit_rate = d['bit_rate'] = float(probe_format.pop('bit_rate')) or None
     d['_ffprobe_meta'] = probe_results
 
-    extradata_hashes = d['hashes'] = []
+    hashes = d['extradata_hashes'] = []
     for s in probe_results['streams']:
         h = s.pop('extradata_hash', None)
         if h:
-            *hash_type, hash_s = h.split(':')
-            extradata_hashes.append( (hash_type, int(hash_s, 16)) )
+            *hash_types, hash_s = h.split(':')
+            hashes.append( FFProbeHash([s['codec_type']]+hash_types, int(hash_s, 16)) )
     probe_video_streams = [ s for s in probe_results['streams'] if s['codec_type'].startswith('video') ]
     probe_audio_streams = [ s for s in probe_results['streams'] if s['codec_type'].startswith('audio') ]
     probe_chapters = probe_results.get('chapters', None)
