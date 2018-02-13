@@ -30,6 +30,8 @@ class Comment(M3U_line):
 class FileHeader(Comment):
     pass
 class M3U_meta(Comment):
+    pass
+class M3U_INF(M3U_meta):
     def to_dict(self):
         assert self.text.startswith('#EXTINF:')
         s = self.text[len('#EXTINF:'):]
@@ -43,6 +45,11 @@ class M3U_meta(Comment):
         if tags:
             d['tags'] = tags
         return d
+class M3U_GRP(M3U_meta):
+    def to_dict(self):
+        assert self.text.startswith('#EXTGRP:')
+        s = self.text[len('#EXTGRP:'):]
+        return { 'group': s.strip() }
 class M3U_path(M3U_line):
     def to_dict(self, urlparse=urllib.parse.urlparse):
         url = urlparse(self.text)
@@ -77,8 +84,10 @@ def read_playlist(arg, mode='rU'):
         if line.startswith('#'):
             if line.startswith('#EXTM3U'):
                 yield FileHeader(line, lineno)
-            elif line.startswith('#EXT'):
-                yield M3U_meta(line, lineno)
+            elif line.startswith('#EXTINF'):
+                yield M3U_INF(line, lineno)
+            elif line.startswith('#EXTGRP'):
+                yield M3U_GRP(line, lineno)
             else:
                 yield Comment(line, lineno)
             continue
@@ -115,14 +124,16 @@ class M3U:
         return iter(self.entries)
     def from_iterable(self, iterable):
         self.header, self.entries = None, []
-        meta, meta_lines, comments = {}, [], []
+        groups, meta, meta_lines, comments = [], {}, [], []
         order = 0
         for token in iterable:
             if isinstance(token, FileHeader):
                 self.header = token
-            elif isinstance(token, M3U_meta):
+            elif isinstance(token, M3U_INF):
                 meta_lines.append(token)
                 meta.update(token.to_dict())
+            elif isinstance(token, M3U_GRP):
+                groups.append(token.to_dict()['group'])
             elif isinstance(token, Comment):
                 comments.append(token)
             elif isinstance(token, M3U_path): # includes playlists
@@ -136,6 +147,8 @@ class M3U:
                 order += 1
                 if comments:
                     e['comments'], comments = comments, []
+                if groups:
+                    e['groups'], groups = groups, []
                 self.entries.append(e)
             else:
                 error("Programming error: %s is unexpectedly type %s", token, type(token))
@@ -151,6 +164,7 @@ class M3U:
             else:
                 mock_title, _ = splitext(e['filename'])
             tags = e.get('tags', [])
+            groups = e.get('groups', [])
             if verbose:
                 yield '#'
                 yield '# %s' % (title or mock_title)
@@ -164,8 +178,10 @@ class M3U:
                 if any(dimensions):
                     yield '# %sx%s' % dimensions
             if duration or title or tags:
-                yield '#EXTINF:%s,%s' % (duration or '-1', ','.join([title]+tags))
-            yield '%s' % (e.get('url', None) or e.get('path', None) or e['playlist'])
+                yield '#EXTINF:%s,%s' % (duration or '-1', ','.join( ([title]+tags if title else tags) ))
+            if groups:
+                yield '#EXTGRP:%s' % ', '.join(groups)
+            yield '%s' % (e['url'].geturl() if 'url' in e else e.get('path', None) or e['playlist'])
     def to_file(self, filename, mode='w'):
         with open(filename, mode) as fo:
             fo.write( '\n'.join(self.get_lines()) )
