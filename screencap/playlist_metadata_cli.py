@@ -11,4 +11,4 @@ def main(verbose=__debug__):
     execname, *args = sys.argv
     for arg in args:
         pl = parse_playlist(arg)
-        print( '\n'.join(pl.get_lines()) )
+        print( '\n'.join(pl.get_lines(verbose=verbose)) )

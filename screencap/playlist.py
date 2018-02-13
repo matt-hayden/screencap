@@ -13,6 +13,7 @@ from .ffprobe import get_info
 from .ffmpeg import make_tiles
 
 ConnectionError = requests.exceptions.ConnectionError
+InvalidSchema = requests.exceptions.InvalidSchema
 
 
 def clean_filename(text, dropchars='/;:<>&'):
@@ -51,6 +52,8 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
                     ok = s.head(url).ok
                 except ConnectionError:
                     ok = False
+                except InvalidSchema:
+                    ok = 'unknown'
                 if ok:
                     e['status'] = ok
                     m = get_info(url)

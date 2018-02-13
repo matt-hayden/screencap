@@ -53,7 +53,7 @@ def get_info(arg):
     elif (n_video_streams == 1):
         probe_video = probe_video_streams.pop()
     else:
-        probe_video_streams.sort(key=lambda vs: -vs['bit_rate'])
+        probe_video_streams.sort(key=lambda vs: (-vs.get('bit_rate', 0), -vs.get('width', 0)))
         probe_video = probe_video_streams.pop(0)
     width = d['width'] = int(probe_video.pop('width'))
     height = d['height'] = int(probe_video.pop('height'))
