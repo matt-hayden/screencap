@@ -3,29 +3,15 @@ import logging
 logger = logging.getLogger()
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
-import collections
 import json
 import subprocess
-import urllib.parse
-
-"""
-Host status is tracked and, after a set number of failures, remote operations may be
-"""
-host_status = collections.Counter()
 
 
-def get_info(arg, failures_allowed_per_host=5, urlparse=urllib.parse.urlparse):
+def get_info(arg):
     """
     Process the output of the helpful ffprobe, which works on both local files and over HTTP
     """
     assert arg
-    u = urlparse(arg)
-    h = u.netloc or None
-    if h:
-        h = None if (h.lower() == 'localhost') else h
-        if h and (host_status[h] < -failures_allowed_per_host):
-            warn("Ignoring host '%s' after %d errors", h, -host_status[h])
-            return
     ffprobe_args = '-hide_banner -show_format -show_streams -show_chapters -show_data_hash SHA256 -print_format json'.split()
     debug("Running ffprobe %s %s", ' '.join(ffprobe_args), arg)
     proc = subprocess.Popen(['ffprobe']+ffprobe_args+[arg], stdout=subprocess.PIPE)
@@ -33,11 +19,7 @@ def get_info(arg, failures_allowed_per_host=5, urlparse=urllib.parse.urlparse):
     if (proc.returncode != 0) or not probe_results_json:
         error("error probing %s:" % arg)
         error("returned %d with output '%s'" % (proc.returncode, probe_results_json))
-        if h:
-            host_status[h] -= 1
         return
-    if h:
-        host_status[h] += 1
     probe_results = json.loads(probe_results_json.decode()) # is UTF-8?
     probe_format = probe_results['format']
 
@@ -75,6 +57,6 @@ def get_info(arg, failures_allowed_per_host=5, urlparse=urllib.parse.urlparse):
         probe_video = probe_video_streams.pop(0)
     width = d['width'] = int(probe_video.pop('width'))
     height = d['height'] = int(probe_video.pop('height'))
-    fps = d['fps'] = probe_video.pop('average_frame_rate')
-    nb_frames = d['nb_frames'] = probe_video.pop('nb_frames')
+    fps = d['fps'] = probe_video.pop('avg_frame_rate')
+    nb_frames = d['nb_frames'] = probe_video.pop('nb_frames', None)
     return d

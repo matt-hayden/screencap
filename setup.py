@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 
 setup(name='PyScreencap',
-      version = "3.0a2",
+      version = "3.0a3",
       description='Simple tiled screencaps of local and remote video',
       url='https://github.com/matt-hayden/screencap',
       maintainer="Matt Hayden (Valenceo, LTD.)",
@@ -14,5 +14,6 @@ setup(name='PyScreencap',
               'playlist_metadata=screencap.playlist_metadata_cli:main',
               ]
       },
+      install_requires = [ 'requests' ],
       zip_safe=True # but, ffmpeg and convert-im6 need to be on the system
      )
