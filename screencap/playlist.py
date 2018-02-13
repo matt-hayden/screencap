@@ -3,28 +3,36 @@ import multiprocessing
 logger = multiprocessing.get_logger()
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
+import collections
+from datetime import datetime
 import itertools
+import os.path
 import urllib.parse
 
 import requests
 
-from .m3u import M3U
-from .ffprobe import get_info
 from .ffmpeg import make_tiles
+from . import ffprobe
+from .m3u import M3U
+from .util import *
+
+now = datetime.now
 
 ConnectionError = requests.exceptions.ConnectionError
 InvalidSchema = requests.exceptions.InvalidSchema
-
-
-def clean_filename(text, dropchars='/;:<>&'):
-    return ''.join('-' if (c in dropchars) else c for c in text.replace(' ', '_'))
 
 
 def _parse_entries(host_entries, required_members='duration title'.split(), skip_root=False):
     """
     Worker for parse_playlist()
     """
+    cache = collections.OrderedDict()
+    def get_info(*args, **kwargs):
+        r = cache[args] = cache.get(args, None) or ffprobe.get_info(*args, **kwargs)
+        return dict(r) # return a copy
+
     host, entries = host_entries
+    debug("host '%s': %d paths", host or '(none)', len(entries))
     results = []
     y = results.append
     if host:
@@ -52,10 +60,10 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
                     ok = s.head(url).ok
                 except ConnectionError:
                     ok = False
-                except InvalidSchema:
+                except InvalidSchema: # rtmp and rtp, for example
                     ok = 'unknown'
                 if ok:
-                    e['status'] = ok
+                    e['status'] = (now(), ok)
                     m = get_info(url)
                     if m:
                         m.update(e)
@@ -64,16 +72,22 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
                 y(e)
     else:
         for e in entries:
-            m = get_info(e['path'])
-            if m:
-                m.update(e)
-                y(m)
+            path = e['path']
+            ok = os.path.exists(path)
+            if ok:
+                m = get_info(path)
+                if m:
+                    m.update(e)
+                    y(m)
+                    continue
             else:
-                y(e)
+                warn("'%s' not found", path)
+            y(e)
+    debug("cached %d calls to host '%s'", len(cache), host or '(none)')
     return results
 
 
-def parse_playlist(*args, pool=multiprocessing.Pool()):
+def parse_playlist(*args):
     """
     Processes a M3U playlist, injecting values for title and duration for each entry.
     """
@@ -86,9 +100,12 @@ def parse_playlist(*args, pool=multiprocessing.Pool()):
     host_entries = { h: list(es) for h, es in itertools.groupby(sorted(playlist.entries, key=host_key), key=host_key) }
     info("Processing %d different hosts for %d entries", len(host_entries), len(playlist))
     debug( ' '.join( (h or '(none)') for h in sorted(host_entries.keys(), key=lambda s: s.lower() if isinstance(s, str) else '') ) )
-    for level in pool.imap_unordered(_parse_entries, host_entries.items()):
-        for e in level:
-            new_entries[e['order']] = e
+    with multiprocessing.Pool( min(len(host_entries), 32) ) as pool:
+        for level in pool.imap_unordered(_parse_entries, host_entries.items()):
+            for e in level:
+                assert e
+                new_entries[e['order']] = e
+    assert None not in new_entries
     playlist.entries = new_entries
     return playlist
 
