@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
 
@@ -23,21 +23,28 @@ class FileHeader(Comment):
 class M3U_meta(Comment):
     pass
 class M3U_INF(M3U_meta):
-    def parse(self, label='#EXTINF:'):
+    def to_dict(self, label='#EXTINF:'):
         assert self.text.startswith(label)
-        s = self.text[len(label):]
-        duration, *tags = s.split(',')
-        return duration, tags
-    def to_dict(self):
-        duration, tags = self.parse()
-        title = tags.pop(0)
+        s = self.text[len(label):].strip()
+        if not s:
+            return {}
         d = {}
-        if (duration not in ['', '0', '-1']):
-            d['duration'] = duration
-        if title:
-            d['title'] = title
+        duration_s, *tags = s.split(',')
         if tags:
+            d['title'] = tags.pop(0)
             d['tags'] = tags
+        if ' ' in duration_s:
+            duration, *_ = duration_s.split()
+            info("Extra parameters %s ignored", str(_))
+        else:
+            duration = duration_s
+        try:
+            float(duration)
+        except:
+            info("Duration value '%s' ignored", duration)
+            duration = None
+        if duration and duration not in ['0', '-1']:
+            d['duration'] = duration
         return d
 class M3U_VLCOPT(M3U_meta):
     def parse(self, label='#EXTVLCOPT:'):
@@ -160,6 +167,9 @@ class M3U_base:
                 if groups:
                     e['groups'], groups = groups, set()
                 if vlcopt:
+                    for k in 'start-time stop-time'.split():
+                        if k in vlcopt:
+                            e[k] = float(vlcopt.pop(k))
                     e['VLCOPT'], vlcopt = vlcopt, collections.OrderedDict()
                 self.entries.append(e)
             else:
@@ -194,6 +204,8 @@ class M3U(M3U_base):
                 chapters	= e.get('chapters', [])
                 dimensions	= (e.get('width', 0), e.get('height', 0))
                 file_size	= e.get('file_size', None)
+                fps     	= e.get('fps', None)
+                languages       = e.get('languages', [])
                 hashes  	= e.get('extradata_hashes', [])
                 #
                 if bit_rate:
@@ -202,7 +214,12 @@ class M3U(M3U_base):
                 if file_size is not None:
                     yield '# {:,d} bytes'.format(file_size)
                 if any(dimensions):
-                    yield '# %sx%s' % dimensions
+                    x, y = dimensions
+                    yield '# %dx%d (%.3f Mpixels)' % (x, y, x*y/1E6)
+                if fps:
+                    yield '# %s fps' % fps
+                if any(languages):
+                    yield '# Language: %s' % ' '.join(languages)
                 if chapters:
                     yield '#'
                     yield '# %d chapters' % len(chapters)
@@ -214,6 +231,9 @@ class M3U(M3U_base):
                     yield '#'
             for k, v in vlcopt.items():
                 yield '#EXTVLCOPT:%s=%s' % (k, v)
+            for k in 'start-time stop-time'.split():
+                if k in e:
+                    yield '#EXTVLCOPT:%s=%f' % (k, e[k])
             if duration or title or tags or vlcopt:
                 yield '#EXTINF:%s,%s' % (duration or '-1', ','.join( ([title]+tags if title else tags) ))
             if groups:
