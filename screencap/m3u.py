@@ -6,6 +6,7 @@ debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger
 
 import collections
 from datetime import datetime
+import shlex
 import urllib.parse
 
 from .util import *
@@ -34,8 +35,13 @@ class M3U_INF(M3U_meta):
             d['title'] = tags.pop(0)
             d['tags'] = tags
         if ' ' in duration_s:
-            duration, *_ = duration_s.split()
-            info("Extra parameters %s ignored", str(_))
+            duration, *inf_parameters = shlex.split(duration_s)
+            if inf_parameters:
+                if all('=' in s for s in inf_parameters):
+                    inf_parameters = [ s.split('=', 1) for s in inf_parameters ]
+                    d['_inf_parameters'] = collections.OrderedDict(inf_parameters)
+                else:
+                    d['_inf_parameters'] = inf_parameters
         else:
             duration = duration_s
         try:
@@ -181,16 +187,18 @@ class M3U(M3U_base):
             if verbose:
                 yield '# %s' % now()
         for e in self.entries:
+            get = e.get
             yield ''
-            duration = e.get('duration', None)
-            title = e.get('title', None)
-            vlcopt = e.get('VLCOPT', {})
+            duration		= get('duration', None)
+            inf_parameters	= get('_inf_parameters', None)
+            title		= get('title', None)
+            vlcopt		= get('VLCOPT', {})
             if 'playlist' in e:
                 mock_title = e['playlist']
             else:
                 mock_title, _ = splitext(e['filename'])
-            tags = e.get('tags', [])
-            groups = e.get('groups', [])
+            tags = get('tags', [])
+            groups = get('groups', [])
             if verbose:
                 yield '#'
                 yield '# "%s"' % (title or mock_title)
@@ -200,13 +208,13 @@ class M3U(M3U_base):
                     yield '# %s status %s' % e['status'] # e['status'] is supposed to be a 2-tuple
                 yield '#'
                 #
-                bit_rate	= e.get('bit_rate', None)
-                chapters	= e.get('chapters', [])
-                dimensions	= (e.get('width', 0), e.get('height', 0))
-                file_size	= e.get('file_size', None)
-                fps     	= e.get('fps', None)
-                languages       = e.get('languages', [])
-                hashes  	= e.get('extradata_hashes', [])
+                bit_rate	= get('bit_rate', None)
+                chapters	= get('chapters', [])
+                dimensions	= (get('width', 0), get('height', 0))
+                file_size	= get('file_size', None)
+                fps     	= get('fps', None)
+                languages       = get('languages', [])
+                hashes  	= get('extradata_hashes', [])
                 #
                 if bit_rate:
                     assert isinstance(bit_rate, (int, float))
@@ -234,15 +242,24 @@ class M3U(M3U_base):
             for k in 'start-time stop-time'.split():
                 if k in e:
                     yield '#EXTVLCOPT:%s=%f' % (k, e[k])
-            if duration or title or tags or vlcopt:
-                yield '#EXTINF:%s,%s' % (duration or '-1', ','.join( ([title]+tags if title else tags) ))
+            if duration or inf_parameters or title or tags or vlcopt:
+                tpart = ','.join( ([title]+tags if title else tags) )
+                if inf_parameters:
+                    if isinstance(inf_parameters, dict):
+                        inf_parts = [ '%s=%s' % (shlex.quote(k), shlex.quote(v)) for (k, v) in inf_parameters.items() ]
+                    else:
+                        inf_parts = inf_parameters
+                    dpart = '%s %s' % (duration or '-1', ' '.join(inf_parts))
+                else:
+                    dpart = str(duration) if duration else '-1'
+                yield '#EXTINF:%s,%s' % (dpart, tpart)
             if groups:
                 for g in sorted(groups):
                     yield '#EXTGRP:%s' % g
             if 'url' in e:
                 yield e['url'].geturl()
             else:
-                yield e.get('path', None) or e['playlist'] # TODO
+                yield get('path', None) or e['playlist'] # TODO
     def to_file(self, filename, mode='w', **kwargs):
         with open(filename, mode) as fo:
             c = fo.write( '\n'.join(self.get_lines(**kwargs)) )
