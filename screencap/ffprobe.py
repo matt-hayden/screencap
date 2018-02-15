@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
 import collections
@@ -47,6 +47,9 @@ def get_info(arg):
             hashes.append( FFProbeHash([s['codec_type']]+hash_types, int(hash_s, 16)) )
     probe_video_streams = [ s for s in probe_results['streams'] if s['codec_type'].startswith('video') ]
     probe_audio_streams = [ s for s in probe_results['streams'] if s['codec_type'].startswith('audio') ]
+    probe_languages = [ s.get('tags', {}).get('language', '').strip() for s in probe_audio_streams ]
+    if any(probe_languages):
+        d['languages'] = [ t.upper() if t else '(none)' for t in probe_languages ]
     probe_chapters = probe_results.get('chapters', None)
     if probe_chapters:
         probe_chapters.sort(key=lambda c: c['id'])
