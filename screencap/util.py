@@ -30,17 +30,18 @@ def pop_start_stop_duration(media_info):
     start = media_info.pop('start-time', 0.)
     stop = media_info.pop('stop-time', None)
     if 'duration' in media_info:
-        duration = float(media_info.pop('duration'))
+        duration = media_info.pop('duration')
+        if isinstance(duration, timedelta):
+            duration = duration.total_seconds()
+        else:
+            duration = float(duration)
     else:
         duration = None
+    file_duration = duration
     if stop:
         duration = stop
     if start:
         duration -= start
     assert duration
-    if isinstance(duration, timedelta):
-        duration, duration_timestamp = duration.total_seconds(), duration
-    else:
-        duration_timestamp = timedelta(seconds=duration)
     assert 0 <= duration, "Could not determine file duration"
-    return ((start, stop), (duration_timestamp, duration))
+    return ((start, stop), (duration, file_duration))

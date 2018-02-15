@@ -3,6 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
+from datetime import timedelta
 import os
 import shlex
 import subprocess
@@ -15,6 +16,8 @@ from .util import *
 
 convert_execname = 'convert-im6'
 ffmpeg_execname = 'ffmpeg'
+
+arrow = '>' # '\u21e8'
 
 
 def Popen(*args, **kwargs):
@@ -40,18 +43,26 @@ def make_tiles(input_path, output_filename=None, layout=(6,5), annotation=True, 
     filename = media_info.pop('filename', None) or pathsplit(input_path)[-1]
     ### Default arguments
     title = media_info.pop('title', None) or splitext(filename)[0]
-    (start, stop), (duration_timestamp, duration) = pop_start_stop_duration(media_info)
+    (start, stop), (duration, file_duration) = pop_start_stop_duration(media_info)
     file_size = media_info.pop('file_size', None)
     dimensions = None
     if ('width' in media_info) and ('height' in media_info):
         dimensions = "[%sx%s]" % (media_info['width'], media_info['height'])
     #
+    if start or stop:
+        ls = str(timedelta(seconds=start)).strip('0') if start else ''
+        rs = str(timedelta(seconds=stop)).strip('0') if stop else str(timedelta(seconds=file_duration)).strip('0')
+        lower_right = '%s%s%s' % (ls, arrow if ls else '', rs)
+    elif duration:
+        lower_right = str(timedelta(seconds=duration)).strip('0')
+    else:
+        lower_right = None
     if annotation == True:
         annotation = [ \
             title, \
             dimensions, \
             ("{:,d} bytes".format(file_size) if file_size else None), \
-            (str(duration_timestamp).strip('0') if duration else None) ]
+            lower_right ]
     if not any(annotation):
         annotation = None
     if not output_filename:
