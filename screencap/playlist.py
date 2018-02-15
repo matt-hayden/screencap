@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 import multiprocessing
-logger = multiprocessing.get_logger()
+logger = multiprocessing.get_logger() # does not accept 'name' argument
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
 import collections
@@ -32,7 +32,10 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
         return dict(r) # return a copy
 
     host, entries = host_entries
-    debug("host '%s': %d paths", host or '(none)', len(entries))
+    if host:
+        debug("host '%s': %d paths", host, len(entries))
+    else:
+        debug("%d local paths", len(entries))
     results = []
     y = results.append
     if host:
@@ -44,7 +47,6 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
                     ok = s.head('http://%s/' % host).ok
                 except ConnectionError:
                     ok = False
-                if (ok == False):
                     warn("Host %s is down", host)
                     return entries
             ### March through the entries
@@ -62,12 +64,11 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
                     ok = False
                 except InvalidSchema: # rtmp and rtp, for example
                     ok = 'unknown'
+                e['status'] = (now(), ok)
                 if ok:
-                    e['status'] = (now(), ok)
                     m = get_info(url)
                     if m:
-                        m.update(e)
-                        y(m)
+                        y({**m, **e})
                         continue
                 y(e)
     else:
@@ -77,8 +78,7 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
             if ok:
                 m = get_info(path)
                 if m:
-                    m.update(e)
-                    y(m)
+                    y({**m, **e})
                     continue
             else:
                 warn("'%s' not found", path)
@@ -121,6 +121,6 @@ def screencap_playlist(*args, **kwargs):
             debug(line)
     for e in pl:
         if not make_tiles( input_path=e['path'] \
-                         , media_info=e \
-                         , output_filename=clean_filename(e['filename'])+'_screens.jpeg'):
+                         , output_filename=clean_filename(e['filename'])+'_screens.jpeg' \
+                         , **e):
             error("Screencaps for '%s' failed", e)
