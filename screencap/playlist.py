@@ -18,17 +18,23 @@ from .util import *
 
 now = datetime.now
 
-ConnectionError = requests.exceptions.ConnectionError
-InvalidSchema = requests.exceptions.InvalidSchema
+
+RequestException = requests.exceptions.RequestException
+
+
+class Cache(collections.OrderedDict):
+    def resize(self, newsize):
+        for _ in range(len(self)-newsize):
+            self.popitem(last=False)
 
 
 def _parse_entries(host_entries, required_members='duration title'.split(), skip_root=False):
     """
     Worker for parse_playlist()
     """
-    cache = collections.OrderedDict()
+    cache = Cache()
     def get_info(*args, **kwargs):
-        r = cache[args] = cache.get(args, None) or ffprobe.get_info(*args, **kwargs)
+        r = cache[args] = cache.get(args, None) or ffprobe.get_info(*args, **kwargs) or {}
         return dict(r) # return a copy
 
     host, entries = host_entries
@@ -45,7 +51,7 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
                 ok = None
                 try:
                     ok = s.head('http://%s/' % host).ok
-                except ConnectionError:
+                except RequestException:
                     ok = False
                     warn("Host %s is down", host)
                     return entries
@@ -60,10 +66,8 @@ def _parse_entries(host_entries, required_members='duration title'.split(), skip
                 ### Check if the URL is up
                 try:
                     ok = s.head(url).ok
-                except ConnectionError:
+                except RequestException:
                     ok = False
-                except InvalidSchema: # rtmp and rtp, for example
-                    ok = 'unknown'
                 e['status'] = (now(), ok)
                 if ok:
                     m = get_info(url)
@@ -114,13 +118,18 @@ def screencap_playlist(*args, **kwargs):
     pl = parse_playlist(*args, **kwargs)
     if not pl:
         warning("Empty playlist")
-    if __debug__:
-        for e in pl:
-            debug(e)
-        for line in pl.get_lines():
-            debug(line)
-    for e in pl:
-        if not make_tiles( input_path=e['path'] \
-                         , output_filename=clean_filename(e['filename'])+'_screens.jpeg' \
-                         , **e):
-            error("Screencaps for '%s' failed", e)
+        return
+    for filename, entries in itertools.groupby(pl, lambda e: e['filename']):
+        entries = list(entries)
+        if (1 < len(entries)):
+            def namer(e, n):
+                t = e.get('title', None)
+                if t:
+                    return clean_filename(t)+'_screens.jpeg'
+                return '%s_Scene-%03d_screens.jpeg' % (clean_filename(filename), n)
+        else:
+            namer = lambda e, n: clean_filename(filename)+'_screens.jpeg'
+        for n, e in enumerate(entries):
+            if not make_tiles(input_path=e['path'], output_filename=namer(e, n), **e):
+                error("Screencaps for '%s' failed", e)
+        info("%d images created for '%s'" % (n, filename))
