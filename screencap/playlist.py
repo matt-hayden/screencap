@@ -22,12 +22,6 @@ now = datetime.now
 RequestException = requests.exceptions.RequestException
 
 
-class Cache(collections.OrderedDict):
-    def resize(self, newsize):
-        for _ in range(len(self)-newsize):
-            self.popitem(last=False)
-
-
 def _parse_entries(host_entries, required_members='duration title'.split(), skip_root=False):
     """
     Worker for parse_playlist()
@@ -101,9 +95,12 @@ def parse_playlist(*args):
         return ''
     playlist = M3U(*args)
     new_entries = [None]*len(playlist)
-    host_entries = { h: list(es) for h, es in itertools.groupby(sorted(playlist.entries, key=host_key), key=host_key) }
+    host_entries = { h: list(es) for h, es in \
+            itertools.groupby(sorted(playlist.entries, key=host_key), key=host_key) }
     info("Processing %d different hosts for %d entries", len(host_entries), len(playlist))
-    debug( ' '.join( (h or '(none)') for h in sorted(host_entries.keys(), key=lambda s: s.lower() if isinstance(s, str) else '') ) )
+    debug( ' '.join( (h or '(none)') for h in \
+            sorted(host_entries.keys(), \
+                key=lambda s: s.lower() if isinstance(s, str) else '') ) )
     with multiprocessing.Pool( min(len(host_entries), 32) ) as pool:
         for level in pool.imap_unordered(_parse_entries, host_entries.items()):
             for e in level:
@@ -114,22 +111,29 @@ def parse_playlist(*args):
     return playlist
 
 
-def screencap_playlist(*args, **kwargs):
+def get_title(entry, order=None):
+    t = entry.get('title', None)
+    if t:
+        return clean_filename(t)+'_screens.jpeg'
+    if order is not None:
+        return '%s_Scene-%03d_screens.jpeg' % (clean_filename(filename), order)
+    return '%s_screens.jpeg' % clean_filename(filename)
+def screencap_playlist(*args, get_title=get_title, **kwargs):
+    assert callable(get_title)
     pl = parse_playlist(*args, **kwargs)
     if not pl:
         warning("Empty playlist")
         return
+    failures = 0
     for filename, entries in itertools.groupby(pl, lambda e: e['filename']):
         entries = list(entries)
         if (1 < len(entries)):
-            def namer(e, n):
-                t = e.get('title', None)
-                if t:
-                    return clean_filename(t)+'_screens.jpeg'
-                return '%s_Scene-%03d_screens.jpeg' % (clean_filename(filename), n)
+            order_entry = enumerate(entries, start=1)
         else:
-            namer = lambda e, n: clean_filename(filename)+'_screens.jpeg'
-        for n, e in enumerate(entries):
-            if not make_tiles(input_path=e['path'], output_filename=namer(e, n), **e):
+            order_entry = [ (None, entries[0]) ]
+        for n, e in order_entry:
+            if not make_tiles(input_path=e['path'], output_filename=get_title(e, n), **e):
+                failures += 1
                 error("Screencaps for '%s' failed", e)
         info("%d images created for '%s'" % (n, filename))
+    return (failures == 0)

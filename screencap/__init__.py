@@ -1,5 +1,6 @@
 
 from .ffmpeg import make_tiles
-from .playlist import screencap_playlist
+from .playlist import parse_playlist, screencap_playlist
+from .splitter import get_splitter
 
 screencap = make_tiles

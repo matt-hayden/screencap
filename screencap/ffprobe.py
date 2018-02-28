@@ -7,22 +7,26 @@ import collections
 import json
 import subprocess
 
+from .util import *
+
+ffprobe_execname = etc_path / 'ffprobe.bash'
+
 
 class FFProbeHash(collections.namedtuple('ExtraDataHash', 'types value')):
     def __str__(self):
         return '%s:%X' %(':'.join(self.types), self.value)
 
-def get_info(arg):
+def get_info(filename):
     """
     Process the output of the helpful ffprobe, which works on both local files and over HTTP
     """
-    assert arg
-    ffprobe_args = '-hide_banner -show_format -show_streams -show_chapters -show_data_hash SHA256 -print_format json'.split()
-    debug("Running ffprobe %s %s", ' '.join(ffprobe_args), arg)
-    proc = subprocess.Popen(['ffprobe']+ffprobe_args+[arg], stdout=subprocess.PIPE)
+    ffprobe_args = '-show_format -show_streams -show_chapters -show_data_hash SHA256 -print_format json'.split()
+    debug("Running %s %s %s", ffprobe_execname, ' '.join(ffprobe_args), filename)
+    proc = subprocess.Popen([ str(ffprobe_execname), *ffprobe_args, filename ], \
+            stdout=subprocess.PIPE)
     probe_results_json, _ = proc.communicate()
     if (proc.returncode != 0) or not probe_results_json:
-        error("error probing %s:" % arg)
+        error("error probing %s:" % filename)
         error("returned %d with output '%s'" % (proc.returncode, probe_results_json))
         return
     probe_results = json.loads(probe_results_json.decode()) # is UTF-8?
@@ -67,5 +71,5 @@ def get_info(arg):
     width = d['width'] = int(probe_video.pop('width'))
     height = d['height'] = int(probe_video.pop('height'))
     fps = d['fps'] = probe_video.pop('avg_frame_rate')
-    nb_frames = d['nb_frames'] = probe_video.pop('nb_frames', None)
+    nframes = d['nframes'] = probe_video.pop('nframes', None)
     return d

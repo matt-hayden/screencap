@@ -4,20 +4,57 @@ logger = logging.getLogger(__name__)
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
 from datetime import timedelta
-import os
+import os, os.path
 import shlex
 import subprocess
 import sys
 import tempfile
 
+from .converter import Converter
 from .ffprobe import get_info
 from .util import *
 
 
 convert_execname = 'convert-im6'
-ffmpeg_execname = 'ffmpeg'
+ffmpeg_execname = etc_path / 'ffmpeg.bash'
 
 arrow = '>' # '\u21e8'
+
+
+class FFMpegConverter(Converter):
+    execname = etc_path / 'ffmpeg.bash'
+class FFMpegSplitter(FFMpegConverter):
+    def __init__(self, entries, **options):
+        for entry in entries:
+            if 'output_path' not in entry:
+                entry['output_path'] = os.path.join(entry.get('output_dir', ''), entry['output_filename'])
+    def commands(self, entries, sq=shlex.quote):
+        execname = sq(str(self.execname))
+        output_dirs = set( filter(None, (e.get('output_dir', None) for e in entries)) )
+        if output_dirs:
+            yield 'mkdir -p '+' '.join(sq(d) for d in output_dirs)
+        input_files = set()
+        for entry in entries:
+            info("Playlist entry %s", entry.order)
+            input_path      = sq(entry['path'])
+            output_path     = sq(entry['output_path'])
+            line = '{execname} -i {input_path}'
+            begin, end = entry.get('start-time', None), entry.get('stop-time', None)
+            if begin:
+                line += ' -ss {begin!s}'
+            if end:
+                line += ' -to {end!s}'
+            line += ' -codec copy {output_path}'
+            yield line.format(**locals())
+            input_files.add(entry.pop('path'))
+            entry['path']       = entry.pop('output_path')
+            entry.pop('output_dir', None)
+            entry['filename']   = entry.pop('output_filename')
+            # before split
+            for k in 'duration start-time stop-time'.split():
+                entry.pop(k, None)
+        yield 'mkdir -p delme covers'
+        yield 'mv -i -t delme '+' '.join(sq(f) for f in input_files)
 
 
 def Popen(*args, **kwargs):
@@ -68,7 +105,7 @@ def make_tiles(input_path, output_filename=None, layout=(6,5), annotation=True, 
     if not output_filename:
         output_filename = splitext(filename)[0]+'_screens.jpeg'
     ### ffmpeg options
-    ffmpeg_args = [] #  ['-hide_banner']
+    ffmpeg_args = []
     if annotation:
         _, output_filename, annotated_file = *tempfile.mkstemp(suffix='.png'), output_filename
         ffmpeg_args += ['-y']
@@ -85,9 +122,9 @@ def make_tiles(input_path, output_filename=None, layout=(6,5), annotation=True, 
         ffmpeg_args += [ '-to', '{:.9f}'.format(stop) ]
     ffmpeg_args += [ '-vf', "select='isnan(prev_selected_t)+gte(t-prev_selected_t\\,%f)',tile=%dx%d" % (seconds_per_thumbnail, layout[0], layout[1]) ]
     ffmpeg_args += '-frames:v 1'.split()
-    proc = Popen( [ ffmpeg_execname, *ffmpeg_args, output_filename ] )
+    proc = Popen( [ str(FFMpegConverter.execname), *ffmpeg_args, output_filename ] )
     proc.communicate()
-    assert (proc.returncode == 0), ("%s failed on '%s'" % (ffmpeg_execname, input_path))
+    assert (proc.returncode == 0), ("ffmpeg failed on '%s'" % (input_path))
     if not annotation:
         return True
     ### Text overlay

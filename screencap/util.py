@@ -1,6 +1,19 @@
 #! /usr/bin/env python3
-
+# intended to 'from .util import *'
+import collections
 from datetime import timedelta
+import os, os.path
+from pathlib import Path
+
+
+module_path, _ = os.path.split(__file__)
+etc_path = Path(module_path) / 'etc'
+
+
+class Cache(collections.OrderedDict):
+    def resize(self, newsize):
+        for _ in range(len(self)-newsize):
+            self.popitem(last=False)
 
 
 def pathsplit(text):

@@ -6,6 +6,7 @@ debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger
 
 import collections
 from datetime import datetime
+from decimal import Decimal
 import shlex
 import urllib.parse
 
@@ -29,7 +30,7 @@ class M3U_INF(M3U_meta):
         s = self.text[len(label):].strip()
         if not s:
             return {}
-        d = {}
+        d = { 'duration': None }
         duration_s, *tags = s.split(',')
         if tags:
             d['title'] = tags.pop(0)
@@ -44,13 +45,11 @@ class M3U_INF(M3U_meta):
                     d['_inf_parameters'] = inf_parameters
         else:
             duration = duration_s
-        try:
-            float(duration)
-        except:
-            info("Duration value '%s' ignored", duration)
-            duration = None
         if duration and duration not in ['0', '-1']:
-            d['duration'] = duration
+            try:
+                d['duration'] = Decimal(duration)
+            except:
+                info("Duration value '%s' ignored", duration)
         return d
 class M3U_VLCOPT(M3U_meta):
     def parse(self, label='#EXTVLCOPT:'):
@@ -175,7 +174,7 @@ class M3U_base:
                 if vlcopt:
                     for k in 'start-time stop-time'.split():
                         if k in vlcopt:
-                            e[k] = float(vlcopt.pop(k))
+                            e[k] = Decimal(vlcopt.pop(k))
                     e['VLCOPT'], vlcopt = vlcopt, collections.OrderedDict()
                 self.entries.append(e)
             else:
@@ -217,7 +216,7 @@ class M3U(M3U_base):
                 hashes  	= get('extradata_hashes', [])
                 #
                 if bit_rate:
-                    assert isinstance(bit_rate, (int, float))
+                    assert isinstance(bit_rate, (int, float, Decimal))
                     yield '# %.2f Mbit' % (bit_rate/1E6)
                 if file_size is not None:
                     yield '# {:,d} bytes'.format(file_size)
