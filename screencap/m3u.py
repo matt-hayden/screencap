@@ -144,7 +144,7 @@ class M3U_base:
             return self.entries.sort(*args, **kwargs)
     def from_iterable(self, iterable):
         groups, meta, meta_lines, comments, vlcopt = set(), {}, [], [], collections.OrderedDict()
-        order = 0
+        order = 1 # I guess it's 1-indexed
         for token in iterable:
             if isinstance(token, FileHeader): # multiple may exist in a file
                 self.header = token

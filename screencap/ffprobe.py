@@ -16,6 +16,16 @@ class FFProbeHash(collections.namedtuple('ExtraDataHash', 'types value')):
     def __str__(self):
         return '%s:%X' %(':'.join(self.types), self.value)
 
+def video_stream_key(stream):
+    try:
+        x = -vs.get('bit_rate', 0)
+    except:
+        x = 0
+    try:
+        y = -vs.get('width', 0)
+    except:
+        y = 0
+    return x, y
 def get_info(filename):
     """
     Process the output of the helpful ffprobe, which works on both local files and over HTTP
@@ -63,11 +73,9 @@ def get_info(filename):
     if (n_video_streams == 0):
         return d
     elif (n_video_streams == 1):
-        probe_video = probe_video_streams.pop()
+        probe_video ,= probe_video_streams
     else:
-        probe_video_streams.sort(key=lambda vs: (-(vs.get('bit_rate', 0) or 0),
-                                                 -(vs.get('width', 0) or 0)) )
-        probe_video = probe_video_streams.pop(0)
+        probe_video = min(probe_video_streams, key=video_stream_key)
     width = d['width'] = int(probe_video.pop('width'))
     height = d['height'] = int(probe_video.pop('height'))
     fps = d['fps'] = probe_video.pop('avg_frame_rate')

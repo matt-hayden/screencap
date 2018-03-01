@@ -28,8 +28,8 @@ class FFMpegSplitter(FFMpegConverter):
         for entry in entries:
             if 'output_path' not in entry:
                 entry['output_path'] = os.path.join(entry.get('output_dir', ''), entry['output_filename'])
-    def commands(self, entries, sq=shlex.quote):
-        execname = sq(str(self.execname))
+    def commands(self, entries, local=False, sq=shlex.quote):
+        execname = sq(str(self.execname)) if local else 'ffmpeg'
         output_dirs = set( filter(None, (e.get('output_dir', None) for e in entries)) )
         if output_dirs:
             yield 'mkdir -p '+' '.join(sq(d) for d in output_dirs)

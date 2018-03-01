@@ -5,9 +5,9 @@ debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger
 
 
 import itertools
-#import json
 import os, os.path
-#import shlex
+
+from . import *
 
 from .ffmpeg import FFMpegSplitter
 from .m3u import M3U
@@ -62,9 +62,15 @@ def get_splitter(*args, \
         duration = options.get('duration', None)
         if not duration:
             durations = set( filter(None, (e.get('duration', None) for e in entries)) )
-            if 1 < len(durations):
-                warn("Multiple values for duration of '%s': %s", path, sorted(durations))
-            duration ,= durations
+            if len(durations) == 0:
+                media_info = get_info(path)
+                duration = media_info['duration']
+            elif len(durations) == 1:
+                duration ,= durations
+            else:
+                if 1 < len(durations):
+                    warn("Multiple values for duration of '%s': %s", path, sorted(durations))
+                duration = max(durations)
             options['duration'] = duration
         entries.sort(key=lambda e: (e.get('start-time', 0), e.get('stop-time', duration)) )
         for file_order, entry in enumerate(entries, start=1):
