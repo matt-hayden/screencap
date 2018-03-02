@@ -28,13 +28,15 @@ class KeyFrames:
             args = [ execname, str(filename) ]
         proc = subprocess.run(args, stdout=subprocess.PIPE)
         assert (0 == proc.returncode)
+        key_frame_filename = proc.stdout.decode().strip()
         rows = self.rows = []
         y = rows.append
-        for line in proc.stdout.decode().split('\n'):
-            if not line.strip():
-                continue
-            f, t = line.split()
-            y( FramePair(int(f), Decimal(t)) )
+        with open(key_frame_filename, 'Ur') as fi:
+            for line in fi:
+                if not line.strip():
+                    continue
+                f, t = line.split()
+                y( FramePair(int(f), Decimal(t)) )
         rows.sort()
     def find(self, value, direction=-1):
         rows = self.rows

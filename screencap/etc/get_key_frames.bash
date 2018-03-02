@@ -5,7 +5,7 @@ set -e
 [[ -t 2 ]] && FFPROBE="${FFPROBE} -loglevel warning"
 
 function get_nframes() {
-  $FFPROBE -select_streams v -show_streams -print_format json "$filename" |
+  $FFPROBE -select_streams v -show_streams -print_format json "$@" |
   jq '[ .streams | .[].nb_frames | tonumber ] | max'
 }
 
@@ -34,19 +34,25 @@ EOF
 done >&2
 shift $((OPTIND-1))
 
-if (( quiet ))
-then
-  FFPROBE="${FFPROBE} -loglevel error"
-fi
-filename="$@"
+(( quiet )) && FFPROBE="${FFPROBE} -loglevel error"
 
-if [[ $nframes ]] || nframes=$(get_nframes "$filename")
+mkdir -p "$HOME/.cache/key_frames"
+filepath="$@"
+filename="${filepath##*/}"
+if [[ $nframes ]] || nframes=$(get_nframes "$filepath")
 then
   PV="${PV} -s $nframes"
 fi
-
-$FFPROBE -select_streams v -show_frames \
-  -show_entries frame=key_frame,best_effort_timestamp_time \
-  -print_format csv "$filename" |
-$PV -l -N "video frames" |
-gawk -F, 'BEGIN { nframes=0 } ($1=="frame") { nframes++ } $2 { print nframes, $3 }'
+for outfile in "${filepath}.key_frames" "${filename}.key_frames" "$HOME/.cache/key_frames/${nframes}-${filename}.key_frames"
+do
+  [[ -s "$outfile" ]] && break
+done
+if [[ ! -s "$outfile" ]]
+then
+  $FFPROBE -select_streams v -show_frames \
+    -show_entries frame=key_frame,best_effort_timestamp_time \
+    -print_format csv "$filepath" |
+  $PV -l -N "video frames" |
+  awk -F, 'BEGIN { nframes=0 } ($1=="frame") { nframes++ } $2 { print nframes, $3 }' > "$outfile"
+fi
+[[ -s "$outfile" ]] && echo "$outfile" || echo "$filepath failed!" >&2
