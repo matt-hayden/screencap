@@ -9,97 +9,87 @@ import json
 import os, os.path
 import shlex
 
-from .converter import Converter
 from .keyframes import KeyFrames
 from .util import *
 
 def to_json(obj):
-    return json.dumps(obj, indent=2)
+    return json.dumps([str(_) for _ in obj], indent=2)
 
-def insert_filename_suffix(filename, suffix):
-    filepart, ext = os.path.splitext(filename)
-    return filepart+suffix+ext
+def sq(arg, **kwargs):
+    return shlex.quote(str(arg))
 
-class MkvMergeConverter(Converter):
+class MkvMergeConverter:
     execname = etc_path / 'mkvmerge.bash'
+    def to_script(self, head='#! /usr/bin/env bash\nset -e\n', **kwargs):
+        return head+'\n'.join(self.get_commands(**kwargs))+'\n'
 class MkvMergeSplitter(MkvMergeConverter):
-    def __init__(self, entries, \
-            input_path=None, \
-            options_filename=None, \
-            output_pattern=None, \
-            keyframes=None, \
-            nframes=None, \
-            **options):
-        if not input_path:
-            ips = set(filter(None, (e['path'] for e in entries) ))
-            input_path ,= ips
-        self.input_path = input_path
-        self.options_filename = options_filename or input_path+'.options'
-        if not output_pattern:
-            filepart, ext = os.path.splitext(input_path)
-            ext = '.MKV'
-            output_pattern = filepart+'-%03d'+ext
-        self.output_pattern = output_pattern
-        output_filenames = collections.defaultdict(list)
-        for entry in entries:
-            fn = entry.get('output_filename', None)
-            if fn:
-                output_filenames[fn].append(entry['order'])
-        duplicate_filenames = [ k for k, v in output_filenames.items() if (1 < len(v)) ]
-        if duplicate_filenames:
-            info("De-duplicating output filenames %s", ', '.join("'%s'" % s for s in duplicate_filenames))
-            for entry in entries:
-                fn = entry.get('output_filename', None)
-                if fn and fn in duplicate_filenames:
-                    entry['output_filename'] = insert_filename_suffix(fn, '-%03d' % entry['order'])
-        if not keyframes:
-            info("Detecting keyframes... (must read entire video)")
-            keyframes = KeyFrames(input_path, nframes=nframes)
-        for entry in entries:
-            info("Playlist entry %s", entry['order'])
-            assert os.path.samefile(entry.pop('path'), input_path)
-            if 'output_path' not in entry:
-                entry['output_path'] = os.path.join(entry.get('output_dir', ''), entry['output_filename'])
-            if 'start-time' in entry:
-                st = entry['start-time']
-                keyframe_before, timestamp_before = keyframes.find(st)
-                assert timestamp_before <= st
-                if (timestamp_before < st):
-                    info("Moving start time (%s) to previous keyframe (%s)", st, timestamp_before)
-                    entry['start-time'] = timestamp_before
-    def options_file_content(self, entries):
-        parts = []
-        for e in entries:
+    """
+    
+    """
+    def __init__(self, entries):
+        def start_stop_key(e):
+            return e.get('start-time', 0), e.get('stop-time', 1E6)
+        self.entries = sorted(entries, key=start_stop_key)
+        "All entries expected to have the same input_path"
+        self.input_filename ,= set(e.filename for e in self.entries)
+        self.input_path ,= set(e.path for e in self.entries)
+        self.options_filename = self.input_filename+'.options'
+        fp, ext = os.path.splitext(self.input_filename)
+        ext = '.MKV'
+        pattern = self.filename_pattern = fp+'-%03d'+ext
+        for n, e in enumerate(self.entries, start=1):
+            if 'intermediate_filename' not in e:
+               e['intermediate_filename'] = pattern % n
+    def get_options(self, at_keyframes='before'):
+        def get_timespan(e):
             begin = e.get('start-time', None)
             end = e.get('stop-time', None)
-            parts.append('{!s}-{!s}'.format(str(begin)+'s' if begin else '', \
-                    str(end)+'s' if end else ''))
+            return '{!s}-{!s}'.format(str(begin)+'s' if begin else '', \
+                    str(end)+'s' if end else '')
+        """
+        mkvmerge splits at the first keyframe after the timecode. You may alter
+        the split so that it aligns with a keyframe by passing one of:
+            at_keyframe='before&after'
+            at_keyframe='before' (the default)
+            at_keyframe=None (saves a little time)
+            at_keyframe='after' (valid, but useless and wasteful)
+        """
+        if at_keyframes:
+            info("Detecting all keyframes for '%s'", self.input_path)
+            keyframes = KeyFrames(self.input_path)
+            if 'before' in at_keyframes:
+                for e in self.entries:
+                    if 'start-time' in e:
+                        t = e['start-time']
+                        e['start-time'], e['actual_start-time'] = \
+                                keyframes.find(t).timestamp, t
+            if 'after' in at_keyframes:
+                for e in self.entries:
+                    if 'stop-time' in e:
+                        t = e['stop-time']
+                        e['stop-time'], e['actual_stop-time'] = \
+                                keyframes.find(t, direction=1).timestamp, t
         return [ '-o'
-               , self.output_pattern
+               , self.filename_pattern
                , '--link'
                , '--split'
-               , 'parts:'+','.join(parts)
+               , 'parts:'+','.join(get_timespan(e) for e in self.entries)
                , self.input_path ]
-    def commands(self, entries, local=False, sq=shlex.quote):
-        execname = sq(str(self.execname)) if local else 'mkvmerge'
-        options_filename = sq(self.options_filename)
-        output_pattern = sq(self.output_pattern)
-        yield ("<< 'EOF' cat > {options_filename}").format(**locals())
-        yield to_json(self.options_file_content(entries))
+    def get_commands(self, **kwargs):
+        "Generate lines of sh code"
+        yield "cat > %s << 'EOF'" % sq(self.options_filename)
+        yield to_json(self.get_options(**kwargs))
         yield 'EOF'
-        output_dirs = set( filter(None, (e.get('output_dir', None) for e in entries)) )
-        if len(output_dirs):
-            yield 'mkdir -p '+' '.join(sq(d) for d in output_dirs)
-        yield ('{execname} @{options_filename}').format(**locals())
-        for n, entry in enumerate(entries, start=1):
-            expected_output_filename = sq(output_pattern % n)
-            output_path = sq(entry['output_path'])
-            yield ('[[ -s {expected_output_filename} ]] && mv {expected_output_filename} {output_path}').format(**locals())
-            # these are stale now
-            entry.pop('output_dir', None)
-            entry['path']       = entry.pop('output_path')
-            entry['filename']   = entry.pop('output_filename')
-            for k in 'duration start-time stop-time'.split():
-                entry.pop(k, None)
-        yield 'mkdir -p delme covers'
-        yield 'mv -i %s delme' % sq(self.input_path)
+        makeme = set()
+        for e in self.entries:
+            op = Path(e['output_path']).parent
+            if not op.is_dir():
+                makeme.add(op)
+        if len(makeme):
+            yield 'mkdir -p '+' '.join(sq(d) for d in makeme)
+        yield '%s @%s' % (sq(self.execname), sq(self.options_filename))
+        for e in self.entries:
+            yield '[[ -s {0} ]] && mv -t {1} {0} || echo "{1} failed!" >&2'.format( \
+                    sq(e['intermediate_filename']), sq(e['output_path']))
+        yield 'mkdir -p covers delme'
+        yield 'mv -t delme %s' % sq(self.input_path)

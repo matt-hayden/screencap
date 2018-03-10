@@ -1,4 +1,4 @@
-#! /usr/bin/env bash
+#! /usr/bin/env bash 
 set -e
 : ${FFPROBE=ffprobe} ${PV=pv}
 
@@ -11,7 +11,7 @@ function get_nframes() {
 
 while getopts ":n:q" flag
 do
-  case "${flag}" in
+  case "$flag" in
     n) nframes="$OPTARG" ;;
     q) quiet=1 ;;
     :)
@@ -37,13 +37,14 @@ shift $((OPTIND-1))
 (( quiet )) && FFPROBE="${FFPROBE} -loglevel error"
 
 mkdir -p "$HOME/.cache/key_frames"
-filepath="$@"
-filename="${filepath##*/}"
-if [[ $nframes ]] || nframes=$(get_nframes "$filepath")
+input_path="$@"
+[[ -s "$input_path" ]] || echo "'$input_path' not found!" >&2
+if [[ $nframes ]] || nframes=$(get_nframes "$input_path")
 then
   PV="${PV} -s $nframes"
 fi
-for outfile in "${filepath}.key_frames" "${filename}.key_frames" "$HOME/.cache/key_frames/${nframes}-${filename}.key_frames"
+filename="${input_path##*/}"
+for outfile in "${input_path}.key_frames" "${filename}.key_frames" "$HOME/.cache/key_frames/${nframes}-${filename}.key_frames"
 do
   [[ -s "$outfile" ]] && break
 done
@@ -51,8 +52,8 @@ if [[ ! -s "$outfile" ]]
 then
   $FFPROBE -select_streams v -show_frames \
     -show_entries frame=key_frame,best_effort_timestamp_time \
-    -print_format csv "$filepath" |
+    -print_format csv "$input_path" |
   $PV -l -N "video frames" |
   awk -F, 'BEGIN { nframes=0 } ($1=="frame") { nframes++ } $2 { print nframes, $3 }' > "$outfile"
 fi
-[[ -s "$outfile" ]] && echo "$outfile" || echo "$filepath failed!" >&2
+[[ -s "$outfile" ]] && echo "$outfile" || echo "'$input_path' failed!" >&2

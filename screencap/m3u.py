@@ -3,16 +3,44 @@ import logging
 logger = logging.getLogger(__name__)
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
-
 import collections
-from datetime import datetime
 from decimal import Decimal
+import itertools
+from pathlib import Path
 import shlex
 import urllib.parse
 
+from .ffprobe import get_media_profile, get_media_profiles, FFProbeHash
 from .util import *
 
-now = datetime.now
+"""
+Helper functions:
+"""
+def file_key(entry):
+    """
+    For a PlaylistEntry, return a path.
+    """
+    if entry.remote:
+        return entry.remote.path
+    return entry.path
+def file_order(entry):
+    """
+    For a PlaylistEntry, return its original order in the Playlist.
+    """
+    return entry['lineno']
+def file_starttime_key(e):
+    """
+    For a PlaylistEntry, return an order by filename, then starting offset.
+    """
+    return file_key(e), e.get('start-time', None)
+def host_key(entry):
+    """
+    For a PlaylistEntry, return a hostname:port, or empty string for local files.
+    """
+    if entry.remote:
+        port = entry.remote.port or ''
+        return entry.remote.hostname.lower()+(':%d' % port if port else '')
+    return ''
 
 
 class M3U_line(collections.namedtuple('M3U_line', 'text lineno')):
@@ -23,70 +51,61 @@ class Comment(M3U_line):
 class FileHeader(Comment):
     pass
 class M3U_meta(Comment):
-    pass
+    def parse(self):
+        if self.text.startswith('#EXT-X'):
+            return self.text[1:].split(':', 1)
+        return (self.text,)
 class M3U_INF(M3U_meta):
-    def to_dict(self, label='#EXTINF:'):
+    def parse(self, label='#EXTINF:'):
         assert self.text.startswith(label)
         s = self.text[len(label):].strip()
         if not s:
-            return {}
-        d = { 'duration': None }
-        duration_s, *tags = s.split(',')
-        if tags:
-            d['title'] = tags.pop(0)
-            d['tags'] = tags
+            return
+        duration_s, *row = s.split(',')
         if ' ' in duration_s:
-            duration, *inf_parameters = shlex.split(duration_s)
-            if inf_parameters:
-                if all('=' in s for s in inf_parameters):
-                    inf_parameters = [ s.split('=', 1) for s in inf_parameters ]
-                    d['_inf_parameters'] = collections.OrderedDict(inf_parameters)
-                else:
-                    d['_inf_parameters'] = inf_parameters
+            duration_s, *parameters = shlex.split(duration_s)
+            if all('=' in s for s in parameters):
+                parameters = KVQ(s.split('=', 1) for s in parameters)
         else:
-            duration = duration_s
-        if duration and duration not in ['0', '-1']:
-            try:
-                d['duration'] = Decimal(duration)
-            except:
-                info("Duration value '%s' ignored", duration)
-        return d
+            parameters = None
+        try:
+            duration = Decimal(duration_s)
+        except:
+            info("Duration value '%s' ignored", duration_s)
+            duration = None
+        if (duration <= 0):
+            duration = None
+        return duration, parameters, row
 class M3U_VLCOPT(M3U_meta):
     def parse(self, label='#EXTVLCOPT:'):
         assert self.text.startswith(label)
         s = self.text[len(label):]
         k, v = s.split('=', 1)
-        return k.strip(), v.strip()
+        if k in 'start-time stop-time'.split():
+            return k, Decimal(v)
+        return k, v.strip()
 class M3U_GRP(M3U_meta):
     def parse(self, label='#EXTGRP:'):
         assert self.text.startswith(label)
         s = self.text[len(label):]
         return s.strip().capitalize()
-class M3U_path(M3U_line):
-    def to_dict(self, urlparse=urllib.parse.urlparse):
-        url = urlparse(self.text)
-        _, filename = pathsplit(url.path)
-        if url.hostname:
-            return { 'filename': urllib.parse.unquote(filename), 'url': url }
-        else:
-            return { 'filename': filename, 'path': self.text }
-class M3U_playlist(M3U_path):
-    def to_dict(self):
-        return { 'filename': urllib.parse.unquote(self.text), 'playlist': self.text }
 
 
 def read_playlist(arg, mode='rU'):
     """
-    Generator yielding one object per non-blank line in input file.
+    Returns a sequence of tokens, in file order.
 
     Note that m3u files have several encodings; m3u8 files are UTF-8.
     """
-    if isinstance(arg, str):
-        path = arg
-        with open(path, mode) as fi:
+    if isinstance(arg, (Path, str)):
+        path = Path(arg)
+        folder = path.parent
+        with path.open(mode) as fi:
             lines = [ line.strip() for line in fi ]
     else:
+        folder = None
         lines = [ line.strip() for line in arg ]
+    lines = list(filter(None, lines))
     if not lines:
         error("Empty file")
         raise StopIteration()
@@ -96,6 +115,8 @@ def read_playlist(arg, mode='rU'):
         if line.startswith('#'):
             if line.startswith('#EXTM3U'):
                 yield FileHeader(line, lineno)
+            elif line.startswith('#EXT-X'):
+                yield M3U_meta(line, lineno)
             elif line.startswith('#EXTINF'):
                 yield M3U_INF(line, lineno)
             elif line.startswith('#EXTGRP'):
@@ -105,161 +126,301 @@ def read_playlist(arg, mode='rU'):
             else:
                 yield Comment(line, lineno)
             continue
-        p = M3U_path(line, lineno)
-        d = p.to_dict()
-        _, ext = splitext(d['filename'])
-        if ext.lower() in '.m3u .m3u8'.split():
-            yield M3U_playlist(line, lineno)
-            continue
-        yield p
+        if '://' in line:
+            yield RemoteFile(line, lineno=lineno)
+        else:
+            yield LocalFile(line, lineno=lineno, folder=folder)
 
 
-class M3U_base:
+class Playlist(HasTitle, HasEntries):
     """
-    The .entries iterable contains dictionaries with the following keys:
-        filename:   if derived from url, un-percent-encoded
-        comments:   non-metadata preceding location in m3u format
-    And one of:
-        path:       filesystem path
-        url:        url tuple
-    Optionally:
-        duration:   number of seconds
-        groups:     some sort of tagging
-        tags:       tags other than title (may show up as album in VLC)
-        title:      tagged title
-
-    Internally:
-        _m3u_meta:  metadata preserved in m3u format
-        VLCOPT:     parameters injected by VLC
+    .header         usually #EXTM3U
+    .entries        entries in file order
     """
-    def __init__(self, *args):
-        self.header, self.entries = None, []
-        self.from_iterable(read_playlist(*args))
-    def __len__(self):
-        return len(self.entries)
-    def __iter__(self):
-        return iter(self.entries)
-    def sort(self, *args, **kwargs):
-        if self.entries:
-            return self.entries.sort(*args, **kwargs)
-    def from_iterable(self, iterable):
-        groups, meta, meta_lines, comments, vlcopt = set(), {}, [], [], collections.OrderedDict()
-        order = 1 # I guess it's 1-indexed
+    def __init__(self, arg, **kwargs):
+        HasTitle.__init__(self, **kwargs)
+        HasEntries.__init__(self, **kwargs)
+        self.header, self.parameters = None, []
+        if isinstance(arg, (str, Path)):
+            filename = self.path = Path(arg)
+            self.folder = self.path.parent
+            self.set_title('playlist_name', self.path.stem)
+            self.from_iterable(read_playlist(self.path))
+        else:
+            self.from_iterable(read_playlist(arg))
+    def _precompute_metadata(self):
+        """
+        Parallel-capable batch update of local files' metadata
+        """
+        return get_media_profiles(*set(e.path for e in self.entries if not e.remote))
+    def by_host(self):
+        """
+        Yields groups of (hostname, True, entries) for remote, or (filename, False, entries) if local.
+        """
+        for hostname, es in itertools.groupby(sorted(self.entries, key=host_key), \
+                key=host_key):
+            if hostname:
+                yield hostname, True, list(es)
+            else:
+                for filename, fes in itertools.groupby(sorted(es, key=file_key), \
+                        key=file_key):
+                    yield filename, False, list(fes)
+    def from_iterable(self, iterable, start=1):
+        """
+        Import an iterable of tokens. Only tokens from read_playlist() are supported.
+        """
+        groups, comments, vlcopt = \
+        [],     [],       KVQ()
+        duration, parameters, tags = \
+        None,     [],         []
+        order = start
         for token in iterable:
-            if isinstance(token, FileHeader): # multiple may exist in a file
+            try:
+                lineno = token.lineno
+            except:
+                lineno = token['lineno']
+            if isinstance(token, FileHeader): # multiple may exist!
                 self.header = token
             elif isinstance(token, M3U_INF):
-                meta_lines.append(token)
-                meta.update(token.to_dict())
+                duration, parameters, new_tags = token.parse()
+                tags.extend(new_tags)
             elif isinstance(token, M3U_GRP):
-                groups.add(token.parse())
+                groups.append(token.parse())
             elif isinstance(token, M3U_VLCOPT):
                 k, v = token.parse()
                 vlcopt[k] = v
+            elif isinstance(token, M3U_meta): # subclass of Comment
+                self.parameters.append((token.lineno, token.text))
             elif isinstance(token, Comment):
                 comments.append(token)
-            elif isinstance(token, M3U_path): # includes playlists
-                e = token.to_dict()
-                if 'playlist' in e:
-                    e['url'] = urllib.parse.urlparse(e['playlist']) # TODO
-                e.update(meta)
-                meta = {}
-                e['_m3u_meta'], meta_lines = meta_lines, []
-                e['order'] = order
-                order += 1
+            elif isinstance(token, PlaylistEntry):
+                entry = token
+                entry.file_order = order
                 if comments:
-                    e['comments'], comments = comments, []
+                    entry['comments'], comments = comments, []
                 if groups:
-                    e['groups'], groups = groups, set()
+                    entry['groups'], groups = groups, set()
                 if vlcopt:
-                    for k in 'start-time stop-time'.split():
-                        if k in vlcopt:
-                            e[k] = Decimal(vlcopt.pop(k))
-                    e['VLCOPT'], vlcopt = vlcopt, collections.OrderedDict()
-                self.entries.append(e)
+                    entry.update(vlcopt)
+                    vlcopt = KVQ()
+                if duration:
+                    entry.set_duration('from_VLCOPT', duration)
+                    duration = None
+                if parameters:
+                    entry['parameters'], parameters = parameters, []
+                if len(tags) == 1:
+                    entry.set_title('from_playlist', tags.pop())
+                elif len(tags) == 2:
+                    debug("Assuming VLC Artist-Track name from '%s'", tags)
+                    entry['Artist'] = tags.pop(0)
+                    entry.set_title('tagged', tags.pop())
+                elif tags:
+                    entry['tags'], tags = tags, []
+                if ('start-time' in entry) or ('stop-time' in entry):
+                    starttime = entry.get('start-time', 0.)
+                    stoptime = entry.get('stop-time', None) or entry.get_duration()
+                    entry.set_duration(stoptime-starttime)
+                entry.playlist = self
+                self.entries.append(entry)
+                order += 1
             else:
                 error("Programming error: %s is unexpectedly type %s", token, type(token))
-class M3U(M3U_base):
-    def get_lines(self, verbose=False):
-        if self.entries:
-            yield '#EXTM3U'
-            if verbose:
-                yield '# %s' % now()
-        for e in self.entries:
-            get = e.get
-            yield ''
-            duration		= get('duration', None)
-            inf_parameters	= get('_inf_parameters', None)
-            title		= get('title', None)
-            vlcopt		= get('VLCOPT', {})
-            if 'playlist' in e:
-                mock_title = e['playlist']
+        self.nlines = lineno
+    def to_m3u(self, **kwargs):
+        """
+        Generate a file representation of the Playlist.
+        """
+        lines = [ (file_order(e), e) for e in self ]
+        lines.extend(self.parameters)
+        lines.sort()
+        for _, token in lines:
+            if hasattr(token, 'to_m3u'):
+                yield from token.to_m3u(**kwargs)
+                yield ''
             else:
-                mock_title, _ = splitext(e['filename'])
-            tags = get('tags', [])
-            groups = get('groups', [])
-            if verbose:
-                yield '#'
-                yield '# "%s"' % (title or mock_title)
-                if tags:
-                    yield '# '+', '.join(tags)
-                if 'status' in e:
-                    yield '# %s status %s' % e['status'] # e['status'] is supposed to be a 2-tuple
-                yield '#'
-                #
-                bit_rate	= get('bit_rate', None)
-                chapters	= get('chapters', [])
-                dimensions	= (get('width', 0), get('height', 0))
-                file_size	= get('file_size', None)
-                fps     	= get('fps', None)
-                languages       = get('languages', [])
-                hashes  	= get('extradata_hashes', [])
-                #
-                if bit_rate:
-                    assert isinstance(bit_rate, (int, float, Decimal))
-                    yield '# %.2f Mbit' % (bit_rate/1E6)
-                if file_size is not None:
-                    yield '# {:,d} bytes'.format(file_size)
-                if any(dimensions):
-                    x, y = dimensions
-                    yield '# %dx%d (%.3f Mpixels)' % (x, y, x*y/1E6)
-                if fps:
-                    yield '# %s fps' % fps
-                if any(languages):
-                    yield '# Language: %s' % ' '.join(languages)
-                if chapters:
-                    yield '#'
-                    yield '# %d chapters' % len(chapters)
-                if hashes:
-                    yield '#'
-                    yield '# extradata_hash found:'
-                    for h in hashes:
-                        yield '#   ' + str(h)
-                    yield '#'
-            for k, v in vlcopt.items():
-                yield '#EXTVLCOPT:%s=%s' % (k, v)
-            for k in 'start-time stop-time'.split():
-                if k in e:
-                    yield '#EXTVLCOPT:%s=%f' % (k, e[k])
-            if duration or inf_parameters or title or tags or vlcopt:
-                tpart = ','.join( ([title]+tags if title else tags) )
-                if inf_parameters:
-                    if isinstance(inf_parameters, dict):
-                        inf_parts = [ '%s=%s' % (shlex.quote(k), shlex.quote(v)) for (k, v) in inf_parameters.items() ]
-                    else:
-                        inf_parts = inf_parameters
-                    dpart = '%s %s' % (duration or '-1', ' '.join(inf_parts))
+                yield token
+
+
+class PlaylistEntry(HasTitle, HasDuration):
+    def __init__(self, \
+            title_default_order='playlist_name'.split(), \
+            duration_default_order='from_metadata from_VLCOPT'.split()):
+        """
+        The arguments pre-populate entries in the titles and durations lists.
+        These entries in increasing precedence
+        """
+        HasTitle.__init__(self, default_order=title_default_order)
+        HasDuration.__init__(self, default_order=duration_default_order)
+    def to_m3u(self, verbose=__debug__):
+        if verbose:
+            yield '# Titles:\t'+' -> '.join(filter(None, self._ordered_titles.values()))
+            if self.get('Artist', None):
+                yield '# Artist:\t"%s"' % self['Artist']
+            d = self.get_duration()
+            if d:
+                yield '# Duration:\t%s' % time_s(d)
+        if 'status' in self:
+            yield '# Status: {1}\t{0!s}'.format(*self['status'])
+        if verbose:
+            if ('width' in self) or ('height' in self):
+                yield '# Resolution:\t%.2f Mpx [%sx%s]' % (self.get('megapixels', 0), self.get('width', 0), self.get('height', 0))
+            if 'file_size' in self:
+                yield '# Size:\t\t{:,d} bytes'.format(self['file_size'])
+            elif 'bit_rate' in self:
+                yield '# Quality:\t{:,d} bit'.format(self['bit_rate'])
+            yield '# Codecs:\t'+', '.join([self['video_codec']]+self['audio_codecs'])
+            yield '#'
+        if 'start-time' in self:
+            yield '#EXTVLCOPT:start-time=%.6f' % self['start-time']
+        if 'stop-time' in self:
+            yield '#EXTVLCOPT:stop-time=%.6f' % self['stop-time']
+        # VLC parses EXTINF lines as comma-separated duration, Artist, Track name
+        if self.get_duration() or ('tags' in self) or ('Artist' in self):
+            tags = self.get('tags', None) or \
+                    [ self.get('Artist', ''), self.get_title() ]
+            duration = self.get_duration()
+            yield ('#EXTINF:%s,' % ('%.6f' % duration if duration else '-1')) \
+                    +','.join(tags)
+    def retrieve_metadata(self):
+        d = { 'format': { 'filename':   str(self.remote or self.path),
+                          'bit_rate':   self['bit_rate'],
+                          'duration':   str(self.get_duration()),
+                          'duration_t': time_s(self.get_duration()),
+                          'tags': { 'title': self.get_title() },
+                        },
+              'streams': [ { 'codec_type': 'video', 'width': self['width'], 'height': self['height'] } ]
+            }
+        fs = self.get('file_size', 0)
+        if fs:
+            d['format']['size']     = fs
+            d['format']['size_t']   = '{:,d} bytes'.format(fs)
+        return d
+    def update_metadata(self, d=None):
+        """
+        Populate object parts from ffprobe JSON output.
+        """
+        def video_stream_key(stream):
+            try:
+                x = float(stream.get('bit_rate', 0))
+            except:
+                x = 0
+            try:
+                y = int(stream.get('width', 0))
+            except:
+                y = 0
+            return x, y
+
+        if d is None:
+            d = get_media_profile(self.remote or self.path)
+        cs = d.pop('chapters', None)
+        f  = d.pop('format', None)
+        ss = d.pop('streams', None)
+        if cs:
+            cs.sort(key=lambda c: c['id'])
+            self['chapters'] = cs
+        if f:
+            if 'tags' in f:
+                t = f['tags'].pop('title', None)
+                if t:
+                    self.set_title('from_metadata', t)
+            self['bit_rate'] = f['bit_rate']
+            dur = f.pop('duration', None)
+            if dur:
+                self.set_duration('from_metadata', Decimal(dur))
+            fs = f.pop('size', None)
+            if fs:
+                self['file_size'] = int(fs)
+        if ss:
+            vss, ass, oss = [], [], []
+            hashes = self['extradata_hashes'] = []
+            for s in ss:
+                stype = s.pop('codec_type', None)
+                h = s.pop('extradata_hash', None)
+                if h:
+                    *hash_types, hash_s = h.split(':')
+                    hashes.append( FFProbeHash([stype]+hash_types, int(hash_s, 16)) )
+                if stype == 'audio':
+                    ass.append(s)
+                elif stype == 'video':
+                    vss.append(s)
                 else:
-                    dpart = str(duration) if duration else '-1'
-                yield '#EXTINF:%s,%s' % (dpart, tpart)
-            if groups:
-                for g in sorted(groups):
-                    yield '#EXTGRP:%s' % g
-            if 'url' in e:
-                yield e['url'].geturl()
-            else:
-                yield get('path', None) or e['playlist'] # TODO
-    def to_file(self, filename, mode='w', **kwargs):
-        with open(filename, mode) as fo:
-            c = fo.write( '\n'.join(self.get_lines(**kwargs)) )
-            fo.write('\n')
+                    oss.append(s)
+            debug('%d video streams', len(vss))
+            debug('%d audio streams', len(ass))
+            debug('%d other streams', len(oss))
+            lang = self['languages'] = []
+            acs = self['audio_codecs'] = []
+            for s in ass:
+                t = s.get('tags', {}).pop('language', '')
+                if t.strip():
+                    lang.append(t)
+                acs.append(s.pop('codec_name', None))
+            primary_vs = max(vss, key=video_stream_key)
+            if primary_vs:
+                vss.remove(primary_vs)
+                c = primary_vs.pop('codec_name', None)
+                if c:
+                    self['video_codec'] = c
+                for k in 'width height avg_frame_rate nframes'.split():
+                    v = primary_vs.pop(k, None)
+                    if v:
+                        self[k] = v
+                debug("Unused video stream: %s", s)
+                mp = self.get('width', 0)*self.get('height', 0)
+                if mp:
+                    self['megapixels'] = mp/1E6
+            for s in vss:
+                debug("Unused video stream: %s", s)
+            for s in ass:
+                debug("Unused audio stream: %s", s)
+            for s in oss:
+                debug("Unused stream: %s", s)
+
+
+class LocalFile(PlaylistEntry, KVQ):
+    def __init__(self, path, folder=None, **kwargs):
+        super().__init__()
+        self.remote = None
+        self.update(kwargs)
+        self.folder = Path(folder or '')
+        self.set_path(self.folder / path)
+    def set_path(self, path):
+        path = self.path = Path(path)
+        self.set_title('from_filename', path.stem)
+    @property
+    def filename(self):
+        return self.path.name
+    def to_m3u(self, **kwargs):
+        yield from PlaylistEntry.to_m3u(self, **kwargs)
+        yield str(self.path)
+class RemoteFile(PlaylistEntry, KVQ):
+    def __init__(self, arg=None, **kwargs):
+        super().__init__()
+        self.remote = None
+        self.update(kwargs)
+        if arg:
+            self.url = arg
+    @property
+    def url(self):
+        return urllib.parse.urlunsplit(self.remote)
+    @url.setter
+    def url(self, arg):
+        self.remote = arg if isinstance(arg, urllib.parse.SplitResult) else urllib.parse.urlsplit(arg)
+        self.set_title('from_url', self.filename.rsplit('.', 1)[0])
+    @property
+    def filename(self):
+        if self.remote:
+            return self.remote.path.rsplit('/', 1)[-1]
+    @property
+    def folder(self):
+        if self.remote:
+             s = self.remote.path.rsplit('/', 1)
+             return s[0] if (1 < len(s)) else ''
+    def to_m3u(self, **kwargs):
+        yield from PlaylistEntry.to_m3u(self, **kwargs)
+        yield str(self.url)
+
+"""
+Use either M3U or Playlist, based on namings within your application.
+"""
+M3U = Playlist

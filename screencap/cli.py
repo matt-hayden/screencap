@@ -1,6 +1,8 @@
 #! /usr/bin/env python3
 import logging
-import os.path
+if __debug__:
+    logging.basicConfig(level=logging.DEBUG)
+
 import sys
 
 from . import *
@@ -19,7 +21,8 @@ def make_screencaps(verbose=__debug__, playlist_extensions='.m3u .m3u8'.split())
         if ext.lower() in playlist_extensions:
             screencap_playlist(arg)
         else:
-            make_tiles(arg)
+            for line in screencap(arg):
+                print(line)
 
 
 def make_split_script(verbose=__debug__):
@@ -30,12 +33,14 @@ def make_split_script(verbose=__debug__):
         logging.basicConfig(level=logging.DEBUG)
     execname, *args = sys.argv
     for arg in args:
-        for splitter, splitter_args in get_splitter(arg):
-            print(splitter.to_script(splitter_args))
+        for splitter in get_splitter(arg):
+            print(splitter.to_script())
+            print()
 
 
 def video_quality_key(e):
-    return -e.get('width', 0), -e.get('bit_rate', 0)
+    status = e.get('status', (None, None))
+    return (not status[1]), -e.get('width', 0), -e.get('bit_rate', 0)
 def sort_playlist(verbose=__debug__, key=video_quality_key):
     """
     Hello
@@ -44,12 +49,8 @@ def sort_playlist(verbose=__debug__, key=video_quality_key):
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
     execname, *args = sys.argv
-    contents = []
     for arg in args:
-        with open(arg, 'Ur') as fi:
-            lines = filter(None, (line.strip() for line in fi))
-            contents.extend(lines)
-    pl = parse_playlist(contents)
-    pl.sort(key=key)
-    for line in pl.get_lines(verbose=verbose):
-        print(line)
+        pl = parse_playlist(arg)
+        pl.sort(key=key)
+        for line in pl.to_m3u(verbose=verbose):
+            print(line)

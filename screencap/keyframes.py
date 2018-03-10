@@ -1,13 +1,20 @@
 #! /usr/bin/env python3
+"""
+Find closest keyframe to a timestamp or frame number in a video.
+
+Relies on bundled script get_key_frames.bash
+"""
+
 import bisect
 from decimal import Decimal
 import collections
 import os, os.path
 from pathlib import Path
-import subprocess
+#import subprocess
 
 from .util import *
 
+execname = etc_path / 'get_key_frames.bash'
 
 class FramePair(collections.namedtuple('FramePair', 'frame_number timestamp')):
     pass
@@ -15,20 +22,19 @@ class FramePair(collections.namedtuple('FramePair', 'frame_number timestamp')):
 class KeyFrames:
     def __init__(self, arg, **kwargs):
         if isinstance(arg, (str, Path)):
-            filename = self.filename = arg
-            self.load_video(filename)
+            path = self.path = Path(arg)
+            self.load_video(path)
         else:
             self.rows = arg
-    def load_video(self, *args, nframes=None, **kwargs):
-        filename, = args
-        execname = str(etc_path / 'get_key_frames.bash')
+    def load_video(self, input_path, nframes=None, **kwargs):
+        assert input_path.exists()
         if nframes:
-            args = [ execname, '-n', str(nframes), str(filename) ]
+            args = [ str(execname), '-n', str(nframes), str(input_path) ]
         else:
-            args = [ execname, str(filename) ]
-        proc = subprocess.run(args, stdout=subprocess.PIPE)
+            args = [ str(execname), str(input_path) ]
+        proc = run(args, stdout=subprocess.PIPE)
         assert (0 == proc.returncode)
-        key_frame_filename = proc.stdout.decode().strip()
+        key_frame_filename, _ = proc.stdout.decode().split('\n')
         rows = self.rows = []
         y = rows.append
         with open(key_frame_filename, 'Ur') as fi:

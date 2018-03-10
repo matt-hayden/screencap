@@ -1,7 +1,7 @@
 
-from .ffmpeg import make_tiles
-from .ffprobe import get_info
+from .ffmpeg import get_screencap_commands
+from .ffprobe import get_media_profiles, get_media_profile
 from .playlist import parse_playlist, screencap_playlist
 from .splitter import get_splitter
 
-screencap = make_tiles
+screencap = get_screencap_commands
