@@ -72,8 +72,14 @@ class MkvMergeSplitter(MkvMergeConverter):
         for p, n in zip(self.entries, self.entries[1:]):
             if 'stop-time' in p and 'start-time' in n:
                 if p['stop-time'] > n['start-time']:
-                    info("Moving stop time %s -> %s", p['stop-time'], n['start-time'])
-                    p['stop-time'] = n['start-time']
+                    pd = p.get_duration()
+                    nd = n.get_duration()
+                    if (pd and nd) and (pd > nd):
+                        info("Moving stop time %s -> %s", p['stop-time'], n['start-time'])
+                        p['stop-time'] = n['start-time']
+                    else:
+                        info("Moving start time %s <- %s", p['stop-time'], n['start-time'])
+                        n['start-time'] = p['stop-time']
         return [ '-o'
                , self.filename_pattern
                , '--link'

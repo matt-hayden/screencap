@@ -221,7 +221,8 @@ class Playlist(HasTitle, HasEntries):
                 if ('start-time' in entry) or ('stop-time' in entry):
                     starttime = entry.get('start-time', Decimal('0'))
                     stoptime = entry.get('stop-time', None) or entry.get_duration()
-                    entry.set_duration(stoptime-starttime)
+                    if stoptime:
+                        entry.set_duration(stoptime-starttime)
                 entry.playlist = self
                 self.entries.append(entry)
                 order += 1
