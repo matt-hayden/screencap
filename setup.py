@@ -11,6 +11,7 @@ setup(name='PyScreencap',
       packages=find_packages(exclude='contrib docs tests'.split()),
       entry_points = {
           'console_scripts': [
+              'insert_screencap_defaults=screencap.cli:insert_screencap_defaults',
               'screencap=screencap.cli:make_screencaps',
               'm3usplit=screencap.cli:make_split_script',
               'm3u_by_quality=screencap.cli:sort_playlist',

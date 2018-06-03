@@ -3,7 +3,11 @@ import logging
 if __debug__:
     logging.basicConfig(level=logging.DEBUG)
 
+from datetime import timedelta
+import os, os.path
 import sys
+
+import json
 
 from . import *
 from .util import *
@@ -54,3 +58,28 @@ def sort_playlist(verbose=__debug__, key=video_quality_key):
         pl.sort(key=key)
         for line in pl.to_m3u(verbose=verbose):
             print(line)
+
+
+def insert_screencap_defaults(verbose=__debug__):
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    execname, *args = sys.argv
+    md = json.load(sys.stdin)
+    if 'title' not in md:
+        try:
+            md['title'] = md['format']['tags']['title']
+        except KeyError:
+            pass
+    if not md.get('title', None):
+        md['title'], _ = os.path.splitext(md['format']['filename'])
+    if 'duration_label' not in md:
+        d = timedelta(seconds=float(md['format']['duration']))
+        md['duration_label'] = str(d).strip(' :0')
+    if 'quality_label' not in md:
+        mbit_rate = int(md['format']['bit_rate'])/1E6
+        vts = [ s for s in md['streams'] if s['codec_type'] == 'video' ]
+        mpixels = max(s.get('width', 0)*s.get('height', 0) for s in vts)/1E6
+        md['quality_label'] = '%0.1f Mpx @ %0.1f Mbit' %(mpixels, mbit_rate)
+    if 'size_label' not in md:
+        md['size_label'] = '{:,d} bytes'.format(int(md['format']['size']))
+    print(json.dumps(md, indent=2))
