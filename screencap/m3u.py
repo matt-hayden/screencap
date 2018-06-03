@@ -32,7 +32,7 @@ def file_starttime_key(e):
     """
     For a PlaylistEntry, return an order by filename, then starting offset.
     """
-    return file_key(e), e.get('start-time', None)
+    return file_key(e), e.get('start-time', 0) or 0
 def host_key(entry):
     """
     For a PlaylistEntry, return a hostname:port, or empty string for local files.
@@ -211,13 +211,15 @@ class Playlist(HasTitle, HasEntries):
                 if len(tags) == 1:
                     entry.set_title('from_playlist', tags.pop())
                 elif len(tags) == 2:
-                    debug("Assuming VLC Artist-Track name from '%s'", tags)
-                    entry['Artist'] = tags.pop(0)
-                    entry.set_title('tagged', tags.pop())
+                    debug("Assuming VLC Artist, Album = %s", tags)
+                    entry['Artist'], entry['Album'] = tags
+                    entry.set_title('tagged', entry['Album'])
+                    tags = []
                 elif tags:
+                    debug("Multiple tags: %s", tags)
                     entry['tags'], tags = tags, []
                 if ('start-time' in entry) or ('stop-time' in entry):
-                    starttime = entry.get('start-time', 0.)
+                    starttime = entry.get('start-time', Decimal('0'))
                     stoptime = entry.get('stop-time', None) or entry.get_duration()
                     entry.set_duration(stoptime-starttime)
                 entry.playlist = self

@@ -22,7 +22,8 @@ RequestException = requests.exceptions.RequestException
 def _parse_entries(arg, \
         failures_allowed=10, \
         VLC_custom_EXTINF=True, \
-        VLC_custom_folders=True):
+        VLC_custom_folders=True, \
+        force_basename_in_output_filename=None):
     """
     Worker for parse_playlist()
 
@@ -75,15 +76,17 @@ def _parse_entries(arg, \
         if video_ext.lower() in '.avi .divx .flv .mpg'.split():
             info('Converting %s file to MKV', video_ext)
             video_ext = '.MKV'
-        else:
-            debug('Assuming %s file is convertible', video_ext)
         for n, e in enumerate(es, start=1):
             output_folder = e.playlist.folder
-            output_filename = (basename+'_Scene-%03d'+video_ext) % n
-            screens_filename = (basename+'_Scene-%03d_screens.jpeg') % n
+            output_filename = ('Scene-%03d' % n)+video_ext
+            screens_filename = 'Scene-%03d_screens.jpeg' % n
+            if force_basename_in_output_filename:
+                output_filename = basename+'_'+output_filename
+                screens_filename = basename+'_'+screens_filename
             if VLC_custom_EXTINF:
-                a = e.get('Artist', '')
+                a = e.get('Artist', '').strip()
                 if a:
+                    debug("Using Artist=%s as filename", a)
                     output_filename = a+video_ext
                     screens_filename = a+'.jpeg'
                 track_name = e._ordered_titles.pop('tagged', '')
@@ -127,29 +130,6 @@ def screencap_playlist(arg, **kwargs):
     failures = 0
     for filename_or_host, is_remote, entries in playlist.by_host():
         for e in entries:
-            """
-            # Devise some labels for the graphic
-            starttime, stoptime = e.get('start-time', None), e.get('stop-time', None)
-            dur_s = time_s(e.get_duration())
-            if starttime or stoptime:
-                starttime = time_s(starttime) or '-'
-                stoptime = time_s(stoptime) or dur_s
-                dur_s = starttime+'-'+stoptime
-            size_s = '%.2f Mpx [%sx%s]' % (e.get('megapixels', 0), \
-                    e.get('width', 0), \
-                    e.get('height', 0))
-            if ('Artist' in e) or ('tags' in e):
-                label = ' - '.join( filter(None, [e.get('Artist', None)]+e.get('tags', [])) )
-            else:
-                label = e.get_title()
-            annotation = [ label, size_s, dur_s, \
-                    "{:,d} bytes".format(e['file_size']) ]
-            # Build the command line
-            for line in get_screencap_commands(e.remote or e.path, title=e.get_title(), **e):
-                print(line)
-                print()
-            """
-            ###
             command_args = []
             if 'start-time' in e:
                 command_args += [ '-ss', e['start-time'] ]

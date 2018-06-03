@@ -3,6 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 debug, info, warn, error, panic = logger.debug, logger.info, logger.warn, logger.error, logger.critical
 
+import collections
 
 from . import *
 
@@ -61,13 +62,26 @@ def get_splitter(arg, \
         if is_remote:
             basename = filename_or_hostname.path.rsplit('/', 1)[-1]
         else:
+            profiles['mkvmerge'] = MkvMergeSplitter
             basename = filename_or_hostname.name
             _, ext = os.path.splitext(basename)
-            if ext.lower() in ['', '.mkv', '.mp4', '.webm']:
-                for entry in entries:
-                    fp, _ = os.path.splitext(str(entry['output_path']))
-                    entry['output_path'] = fp+'.MKV'
-                profiles['mkvmerge'] = MkvMergeSplitter
+            force_ext = '.MKV' if ext.lower() in ['', '.mkv', '.mp4', '.webm'] else None
+            filenames = collections.Counter()
+            for entry in entries:
+                entry['output_path'] = Path(entry['output_path'])
+                fn = entry['output_path'].name
+                fp, _ = os.path.splitext(fn)
+                filenames[fp] += 1
+            for n, entry in enumerate(entries, start=1):
+                p = Path(entry['output_path'])
+                fn = p.name
+                fp, _ = os.path.splitext(fn)
+                if 1 < filenames[fp]:
+                    new_fp = '%s-%03d' % (fp, n)
+                    debug("Renaming %s -> %s", fp, new_fp)
+                    entry['output_path'] = p.parent/(new_fp+(force_ext or ext))
+                elif force_ext:
+                    entry['output_path'] = p.with_suffix(force_ext)
         basename = clean_filename(basename)
         profile, splitter = profiles.get_latest()
         info("Using splitter %s", profile)
