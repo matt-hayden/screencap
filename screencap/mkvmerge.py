@@ -69,6 +69,11 @@ class MkvMergeSplitter(MkvMergeConverter):
                         t = e['stop-time']
                         e['stop-time'], e['actual_stop-time'] = \
                                 keyframes.find(t, direction=1).timestamp, t
+        for p, n in zip(self.entries, self.entries[1:]):
+            if 'stop-time' in p and 'start-time' in n:
+                if p['stop-time'] > n['start-time']:
+                    info("Moving stop time %s -> %s", p['stop-time'], n['start-time'])
+                    p['stop-time'] = n['start-time']
         return [ '-o'
                , self.filename_pattern
                , '--link'
@@ -85,11 +90,12 @@ class MkvMergeSplitter(MkvMergeConverter):
             op = Path(e['output_path']).parent
             if not op.is_dir():
                 makeme.add(op)
-        if len(makeme):
+        if makeme:
             yield 'mkdir -p '+' '.join(sq(d) for d in makeme)
-        yield '%s @%s' % (sq(self.execname), sq(self.options_filename))
+        yield '%s @%s || exit' % (sq(self.execname), sq(self.options_filename))
         for e in self.entries:
-            yield '[[ -s {0} ]] && mv -t {1} {0} || echo "{1} failed!" >&2'.format( \
+            yield '[[ -s {0} ]] && mv {0} {1} || echo "{1} failed!" >&2'.format( \
                     sq(e['intermediate_filename']), sq(e['output_path']))
+        # custom:
         yield 'mkdir -p covers delme'
         yield 'mv -t delme %s' % sq(self.input_path)
